@@ -3,6 +3,7 @@ from typing import Any
 import pandas as pd
 import tqdm
 from qdrant_client import models, QdrantClient
+from qdrant_client.local.qdrant_local import QdrantLocal
 
 from relevance_feedback.feedback import Feedback
 from relevance_feedback.retriever import Retriever
@@ -21,6 +22,12 @@ class RelevanceFeedback:
         self._feedback = feedback
         self._payload_key = payload_key
         self._client = client
+
+        if isinstance(self._client._client, QdrantLocal):
+            raise TypeError(
+                "RelevanceFeedback currently works only with a hosted Qdrant (e.g. in Docker or Qdrant Cloud) "
+                "and does not support local mode (':memory:', or path=...)"
+            )
 
     def _retrieve_payload(self, responses: list[models.ScoredPoint]):
         responses_content = [p.payload[self._payload_key] for p in responses]
@@ -73,7 +80,7 @@ class RelevanceFeedback:
             self._client,
             query_embedding,
             limit=limit,
-            retriever_model_handle=vector_name,
+            vector_name=vector_name,
             collection_name=collection_name,
         )
 

@@ -123,7 +123,7 @@ def vanilla_retrieval(
         client: QdrantClient,
         query_embedding: models.Vector,
         limit: int,
-        retriever_model_handle: str | None,
+        vector_name: str | None,
         collection_name: str,
         excluding_ids: list[models.ExtendedPointId] | None = None,
     ) -> list[models.ScoredPoint]:
@@ -134,7 +134,7 @@ def vanilla_retrieval(
         client: (QdrantClient): Qdrant client.
         query_embedding (models.Vector): Query vector.
         limit (int): The number of points to retrieve.
-        retriever_model_handle (Optional[str]): Named vector handle or None if it's a default vector.
+        vector_name (Optional[str]): Named vector handle or None if it's a default vector.
         collection_name (str): Name of the Qdrant collection.
         excluding_dss (Optional[List[models.ExtendedPointId]]): List of point IDs to exclude from results.
 
@@ -157,7 +157,7 @@ def vanilla_retrieval(
         with_vectors=True,
         with_payload=True,
         limit=limit,
-        using=retriever_model_handle
+        using=vector_name,
     ).points
 
 def train_formula(
