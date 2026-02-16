@@ -1,0 +1,23 @@
+[project]
+name = "relevance_feedback"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=3.0.0",
+    "qdrant-client>=1.16.2",
+    "torch>=2.9.1",
+    "tqdm>=4.67.3",
+]
+
+[dependency-groups]
+cohere = [
+    "cohere>=5.20.2",
+]
+fastembed = [
+    "fastembed>=0.7.4",
+]
+openai = [
+    "openai>=2.16.0",
+]

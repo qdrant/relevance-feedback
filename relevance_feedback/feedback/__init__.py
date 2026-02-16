@@ -1,0 +1,3 @@
+from relevance_feedback.feedback.feedback import Feedback
+from relevance_feedback.feedback.cohere_feedback import CohereFeedback
+from relevance_feedback.feedback.fastembed_feedback import FastembedFeedback
