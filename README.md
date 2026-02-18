@@ -1,8 +1,8 @@
 # Relevance feedback
 
-Framework to customize the Relevance Feedback (Naive) Scoring Formula, introduced in ["Relevance Feedback in Qdrant"](https://qdrant.tech/articles/relevance-feedback/) article, to your dataset (Qdrant collection), retriever, and feedback model.
+Framework to customize the Relevance Feedback Naive Scoring Formula, introduced in ["Relevance Feedback in Qdrant"](https://qdrant.tech/articles/relevance-feedback/) article, to your dataset (Qdrant collection), retriever, and feedback model.
 
-As a result, you will get `a`, `b` and `c` formula parameters, which you can [plug into the Qdrant's `relevance_feedback` interface](https://qdrant.tech/documentation/search-precision/reranking-semantic-search/) & increase the relevance of retrieval in your Qdrant collection.
+As a result, you will get `a`, `b` and `c` formula parameters, which you can [plug into the Qdrant's Relevance Feedback Query interface](https://qdrant.tech/documentation/concepts/search-relevance/#relevance-feedback) & increase the relevance of retrieval in your Qdrant collection.
 
 ## Usage example
 
@@ -15,7 +15,7 @@ from relevance_feedback.retriever import QdrantRetriever
 
 
 if __name__ == "__main__":
-    RETRIEVER_VECTOR_NAME = None
+    RETRIEVER_VECTOR_NAME = None # your named vector handle in Qdrant's collection or None if it's a default vector
     COLLECTION_NAME = "document_collection"
     
     client = QdrantClient(
@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     weights = relevance_feedback.train(
         queries=None,  # if you have specific queries for training, provide a list here
-        amount_of_queries=200,  # otherwise, you can specify amount of synthetic queries sampled from your collection
+        amount_of_queries=200,  # otherwise, you can specify amount of synthetic queries - documents sampled from your collection
         vector_name=RETRIEVER_VECTOR_NAME,
     )
     print('weights are: ', weights)
@@ -150,7 +150,7 @@ if __name__ == "__main__":
 ```python
 from relevance_feedback.evaluate import Evaluator
 
-k = 10  # as in metric@k
+N = 10  # as in metric@N
 EVAL_CONTEXT_LIMIT = 3  # top responses used for mining context pairs
 AMOUNT_OF_EVAL_QUERIES = 100
 
@@ -158,7 +158,7 @@ evaluator = Evaluator.from_relevance_feedback(relevance_feedback=relevance_feedb
 # Similar to `relevance_feedback.train`, you can provide your own set of predefined queries by passing `eval_queries=[<queries>]`, 
 # or use synthetic queries sampled from your collection. The number of synthetic queries is configured via `amount_of_eval_queries`.
 results = evaluator.evaluate_queries(
-    at_k=k,
+    at_n=N,
     formula_params=formula_params,
     amount_of_eval_queries=AMOUNT_OF_EVAL_QUERIES,   
     eval_context_limit=EVAL_CONTEXT_LIMIT
