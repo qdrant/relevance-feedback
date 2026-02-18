@@ -1,8 +1,8 @@
 # Relevance feedback
 
-Framework to customize the Relevance Feedback (Naive) Formula, introduced in ["Relevance Feedback in Qdrant"](https://deploy-preview-1977--condescending-goldwasser-91acf0.netlify.app/articles/relevance-feedback/) article, to your dataset (Qdrant collection), retriever, and feedback model.
+Framework to customize the Relevance Feedback (Naive) Scoring Formula, introduced in ["Relevance Feedback in Qdrant"](https://qdrant.tech/articles/relevance-feedback/) article, to your dataset (Qdrant collection), retriever, and feedback model.
 
-As a result, you will get `a`, `b` and `c` formula parameters, which you can plug into the Qdrant's `relevance_feedback` interface & increase the relevance of retrieval in your Qdrant collection.
+As a result, you will get `a`, `b` and `c` formula parameters, which you can [plug into the Qdrant's `relevance_feedback` interface](https://qdrant.tech/documentation/search-precision/reranking-semantic-search/) & increase the relevance of retrieval in your Qdrant collection.
 
 ## Usage example
 
