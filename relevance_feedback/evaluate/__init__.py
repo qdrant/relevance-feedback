@@ -1,1 +1,1 @@
-from relevance_feedback.evaluate import Evaluator
+from relevance_feedback.evaluate.evaluate import Evaluator

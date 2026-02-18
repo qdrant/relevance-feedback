@@ -88,7 +88,7 @@ def get_synthetic_queries(
         client: QdrantClient,
         collection_name: str,
         limit: int = 250,
-        excluding_IDs: list[models.ExtendedPointId] | None = None
+        excluding_ids: list[models.ExtendedPointId] | None = None
     ) -> list[models.ScoredPoint]:
     """
     Samples random points from the specified Qdrant collection, to use as synthetic queries.
@@ -97,15 +97,15 @@ def get_synthetic_queries(
         client: (QdrantClient): Qdrant client.
         collection_name (str): The name of the Qdrant collection to sample from.
         limit (int): The number of random points to sample.
-        excluding_IDs (Optional[List[models.ExtendedPointId]]): List of point IDs to exclude from results.
+        excluding_ids (Optional[List[models.ExtendedPointId]]): List of point IDs to exclude from results.
 
     Returns:
         List[models.ScoredPoint]: A list of randomly sampled points.
     """
-    if excluding_IDs is not None and len(excluding_IDs) > 0:
+    if excluding_ids is not None and len(excluding_ids) > 0:
         query_filter = models.Filter(
             must_not=[
-                models.HasIdCondition(has_id=excluding_IDs)
+                models.HasIdCondition(has_id=excluding_ids)
             ]
         )
     else:
@@ -136,7 +136,7 @@ def vanilla_retrieval(
         limit (int): The number of points to retrieve.
         vector_name (Optional[str]): Named vector handle or None if it's a default vector.
         collection_name (str): Name of the Qdrant collection.
-        excluding_dss (Optional[List[models.ExtendedPointId]]): List of point IDs to exclude from results.
+        excluding_ids (Optional[List[models.ExtendedPointId]]): List of point IDs to exclude from results.
 
     Returns:
         List[models.ScoredPoint]: A list of scored points.

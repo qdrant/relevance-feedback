@@ -1,14 +1,20 @@
 from typing import Any
 
 import requests
+import tqdm
 from qdrant_client import QdrantClient, models
 from qdrant_client.local.qdrant_local import QdrantLocal
 
+
 from relevance_feedback import RelevanceFeedback
-from relevance_feedback.evaluate.metrics import DcgWinRate, above_threshold_at_n
+from relevance_feedback.evaluate.metrics import (
+    DcgWinRate,
+    above_threshold_at_k,
+    relative_relevance_gain,
+)
 from relevance_feedback.feedback import Feedback
 from relevance_feedback.retriever import Retriever
-from relevance_feedback.train.train import vanilla_retrieval
+from relevance_feedback.train.train import vanilla_retrieval, get_synthetic_queries
 
 
 class Evaluator:
@@ -17,12 +23,17 @@ class Evaluator:
         retriever: Retriever,
         feedback: Feedback,
         client: QdrantClient,
+        collection_name: str,
         payload_key: str | None = None,
+        exclude_synthetic_queries_ids: list[str] | None = None,
     ):
-        self._retriever = retriever
-        self._feedback = feedback
-        self._payload_key = payload_key
-        self._client = client
+        self.retriever = retriever
+        self.feedback = feedback
+        self.client = client
+        self.collection_name = collection_name
+        self.payload_key = payload_key
+
+        self.exclude_synthetic_queries_ids = exclude_synthetic_queries_ids
 
         if isinstance(self._client._client, QdrantLocal):
             raise TypeError(
@@ -33,10 +44,12 @@ class Evaluator:
     @classmethod
     def from_relevance_feedback(cls, relevance_feedback: RelevanceFeedback) -> "Evaluator":
         return Evaluator(
-            relevance_feedback._retriever,
-            relevance_feedback._feedback,
-            relevance_feedback._client,
-            relevance_feedback._payload_key,
+            retriever=relevance_feedback.retriever,
+            feedback=relevance_feedback.feedback,
+            client=relevance_feedback.client,
+            payload_key=relevance_feedback.payload_key,
+            collection_name=relevance_feedback.collection_name,
+            exclude_synthetic_queries_ids=relevance_feedback.synthetic_queries_ids,
         )
 
     def relevance_feedback_retrieval(
@@ -46,7 +59,6 @@ class Evaluator:
         formula_params: dict[str, float],
         limit: int,
         vector_name: str,
-        collection_name: str,
         excluding_ids: list[models.ExtendedPointId] | None = None,
     ) -> list[models.ScoredPoint]:
         """
@@ -60,7 +72,6 @@ class Evaluator:
             formula_params (Dict[str, float]): Trained parameters of the relevance feedback formula.
             limit (int): The number of points to retrieve.
             vector_name (str): Named vector handle or None if it's a default vector.
-            collection_name (str): Name of the Qdrant collection.
             excluding_ids (Optional[List[models.ExtendedPointId]]): List of point IDs to exclude from results.
 
         Returns:
@@ -80,7 +91,7 @@ class Evaluator:
         }
 
         response = requests.post(
-            url=f"{self._client._client.url}/collections/{collection_name}/points/query",
+            url=f"{self._client._client.url}/collections/{self.collection_name}/points/query",
             json={
                 "query": feedback_query,
                 "filter": id_filter,
@@ -104,11 +115,10 @@ class Evaluator:
         self,
         query: Any,
         vector_name: str | None,
-        relevance_feedback_formula_params: dict[str, float],
+        formula_params: dict[str, float],
         payload_key: str | None,
-        collection_name: str,
         dcg_win_rate: DcgWinRate,
-        eval_limit: int = 10,  # N
+        at_k: int = 10,  # metric@k
         eval_context_limit: int = 3,
     ) -> dict[str, int]:
         """
@@ -127,11 +137,10 @@ class Evaluator:
         Args:
             query (any): Original query (e.g., text, image, audio).
             vector_name (Optional[str]): Named vector handle, or None for the default vector.
-            relevance_feedback_formula_params (Dict[str, float]): Trained parameters of the relevance feedback formula.
+            formula_params (Dict[str, float]): Trained parameters of the relevance feedback formula.
             payload_key (Optional[str]): Payload key in Qdrant collection referring to the original data you're retrieving.
-            collection_name (str): Qdrant collection name.
             dcg_win_rate (DcgWinRate): DCG win rate tracker.
-            eval_limit (int): Number of results to evaluate metrics on (@N).
+            at_k (int): Number of results to evaluate metrics on (@k).
             eval_context_limit (int): Number of initial top responses used for relevance feedback.
 
         Returns:
@@ -145,15 +154,15 @@ class Evaluator:
             - If raw data is not in the payload, map point IDs to external storage before rescoring.
         """
 
-        query_embedding = self._retriever.retrieve(query)
+        query_embedding = self.retriever.retrieve(query)
 
         # Initial vanilla retrieval
         responses = vanilla_retrieval(
-            self._client,
+            self.client,
             query_embedding,
             limit=eval_context_limit,
             vector_name=vector_name,
-            collection_name=collection_name,
+            collection_name=self.collection_name,
         )
 
         if payload_key is None:
@@ -173,7 +182,7 @@ class Evaluator:
         responses_content = self._retrieve_payload(responses)
 
         # Getting feedback
-        feedback_model_scores = self._feedback.score(query, responses_content)
+        feedback_model_scores = self.feedback.score(query, responses_content)
         responses_point_ids = [p.id for p in responses]
         feedback = [
             (point_id, score)
@@ -188,10 +197,9 @@ class Evaluator:
         relevance_feedback_responses = self.relevance_feedback_retrieval(
             query_embedding,
             feedback,
-            formula_params=relevance_feedback_formula_params,
-            limit=eval_limit,
+            formula_params=formula_params,
+            limit=at_k,
             vector_name=vector_name,
-            collection_name=collection_name,
             excluding_ids=responses_point_ids,  # excluding initial vanilla retrieval results used for feedback
         )
 
@@ -199,23 +207,23 @@ class Evaluator:
         relevance_feedback_responses_content = [
             p.payload[payload_key] for p in relevance_feedback_responses
         ]
-        golden_scores_relevance_feedback = self._feedback.score(
+        golden_scores_relevance_feedback = self.feedback.score(
             query, relevance_feedback_responses_content
         )
 
         # Calculating custom above_threshold@N for relevance feedback–based retrieval
-        relevance_feedback_above_threshold_at_n = above_threshold_at_n(
-            golden_scores_relevance_feedback, threshold_score, n=eval_limit
+        relevance_feedback_above_threshold_at_n = above_threshold_at_k(
+            golden_scores_relevance_feedback, threshold_score, k=at_k
         )
 
         # 2nd iteration: vanilla retrieval (to compare against relevance feedback–based retrieval)
         # Top results with ranks from EVAL_CONTEXT_LIMIT to N + EVAL_CONTEXT_LIMIT
         vanilla_retrieval_responses = vanilla_retrieval(
-            self._client,
+            self.client,
             query_embedding,
-            limit=eval_limit,
+            limit=at_k,
             vector_name=vector_name,
-            collection_name=collection_name,
+            collection_name=self.collection_name,
             excluding_ids=responses_point_ids,  # excluding initial vanilla retrieval results used for feedback
         )
 
@@ -223,9 +231,9 @@ class Evaluator:
         vanilla_retrieval_responses_content = [
             p.payload[payload_key] for p in vanilla_retrieval_responses
         ]
-        golden_scores_vanilla = self._feedback.score(query, vanilla_retrieval_responses_content)
-        vanilla_above_threshold_at_n = above_threshold_at_n(
-            golden_scores_vanilla, threshold_score, n=eval_limit
+        golden_scores_vanilla = self.feedback.score(query, vanilla_retrieval_responses_content)
+        vanilla_above_threshold_at_n = above_threshold_at_k(
+            golden_scores_vanilla, threshold_score, k=at_k
         )
 
         # Updating DCG win rate metric over eval queries
@@ -234,4 +242,71 @@ class Evaluator:
         return {
             "relevance_feedback_retrieval": relevance_feedback_above_threshold_at_n,
             "vanilla_retrieval": vanilla_above_threshold_at_n,
+        }
+
+    def evaluate_queries(
+        self,
+        at_k: int,
+        formula_params: dict[str, float],
+        eval_queries: list[str] | None = None,
+        amount_of_eval_queries: int | None = None,
+        vector_name: str | None = None,
+        eval_context_limit: int = 3,
+        exclude_synthetic_queries_ids: list[str] | None = None,
+    ) -> dict[str, int]:
+        total_relevance_feedback = 0
+        total_vanilla_retrieval = 0
+        dcg_win_rate = DcgWinRate(k=at_k)
+
+        if (eval_queries is None) is (amount_of_eval_queries is None):
+            raise ValueError("`eval_queries` OR `amount_of_eval_queries` have to be specified.")
+
+        if eval_queries is None:
+            eval_synthetic_queries = get_synthetic_queries(
+                self.client,
+                collection_name=self.collection_name,
+                limit=amount_of_eval_queries,
+                excluding_ids=(
+                    exclude_synthetic_queries_ids
+                    if exclude_synthetic_queries_ids is not None
+                    else self.exclude_synthetic_queries_ids
+                ),
+            )
+            eval_queries = self._retrieve_payload(eval_synthetic_queries)
+
+        for query_idx, query in tqdm.tqdm(
+            enumerate(eval_queries), total=len(eval_queries), desc="Evaluating queries"
+        ):
+            print(f"Evaluating query {query_idx + 1}/{len(eval_queries)}")
+
+            eval_results = self.evaluate_query(
+                query,
+                vector_name=vector_name,
+                formula_params=formula_params,
+                payload_key=self.payload_key,
+                dcg_win_rate=dcg_win_rate,
+                at_k=at_k,
+                eval_context_limit=eval_context_limit,
+            )
+
+            total_relevance_feedback += eval_results["relevance_feedback_retrieval"]
+            total_vanilla_retrieval += eval_results["vanilla_retrieval"]
+
+        print(
+            "\nOn the 2nd retrieval iteration, over all the eval set:\n",
+            f"- Relevance feedback-based retrieval surfaced {total_relevance_feedback} more relevant results compared to the first iteration.\n",
+            f"- While vanilla retrieval surfaced {total_vanilla_retrieval} more relevant results compared to the first iteration.\n",
+        )
+
+        print(
+            f"Relative relevance gain of using relevance feedback–based retrieval is {relative_relevance_gain(total_relevance_feedback, total_vanilla_retrieval)}%\n"
+        )
+
+        print(
+            "DCG win rate over eval set of queries:\n",
+            f"Vanilla retrieval: {dcg_win_rate.evaluate_left()}% wins\nRelevance Feedback-based retrieval: {dcg_win_rate.evaluate_right()}% wins\nTies: {dcg_win_rate.evaluate_ties()}%",
+        )
+        return {
+            "relevance_feedback_retrieval": total_relevance_feedback,
+            "vanilla_retrieval": total_vanilla_retrieval,
         }
