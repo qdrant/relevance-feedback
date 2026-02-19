@@ -1,3 +1,2 @@
 from relevance_feedback.retriever.retriever import Retriever
-from relevance_feedback.retriever.openai_retriever import OpenAIRetriever
 from relevance_feedback.retriever.qdrant_retriever import QdrantRetriever
