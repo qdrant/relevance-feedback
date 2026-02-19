@@ -82,7 +82,7 @@ class RelevanceFeedback:
                 confidence (float), delta (float).
         """
 
-        query_embedding = self.retriever.retrieve(query)
+        query_embedding = self.retriever.embed_query(query)
 
         responses = vanilla_retrieval(
             self.client,

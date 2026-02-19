@@ -9,7 +9,7 @@ from qdrant_client.local.qdrant_local import QdrantLocal
 from relevance_feedback import RelevanceFeedback
 from relevance_feedback.evaluate.metrics import (
     DcgWinRate,
-    above_threshold_at_k,
+    above_threshold_at_n,
     relative_relevance_gain,
 )
 from relevance_feedback.feedback import Feedback
@@ -118,7 +118,7 @@ class Evaluator:
         formula_params: dict[str, float],
         payload_key: str | None,
         dcg_win_rate: DcgWinRate,
-        at_k: int = 10,  # metric@k
+        at_n: int = 10,  # metric@n
         eval_context_limit: int = 3,
     ) -> dict[str, int]:
         """
@@ -140,11 +140,11 @@ class Evaluator:
             formula_params (Dict[str, float]): Trained parameters of the relevance feedback formula.
             payload_key (Optional[str]): Payload key in Qdrant collection referring to the original data you're retrieving.
             dcg_win_rate (DcgWinRate): DCG win rate tracker.
-            at_k (int): Number of results to evaluate metrics on (@k).
+            at_n (int): Number of results to evaluate metrics on (@n).
             eval_context_limit (int): Number of initial top responses used for relevance feedback.
 
         Returns:
-            Dict[str, int]: Counts of desired results above the threshold for each method (cc `abovethreshold_at_N`):
+            Dict[str, int]: Counts of desired results above the threshold for each method (cc `above_threshold_at_n`):
                 {
                   "relevance_feedback_retrieval": <int>,
                   "vanilla_retrieval": <int>
@@ -154,7 +154,7 @@ class Evaluator:
             - If raw data is not in the payload, map point IDs to external storage before rescoring.
         """
 
-        query_embedding = self.retriever.retrieve(query)
+        query_embedding = self.retriever.embed_query(query)
 
         # Initial vanilla retrieval
         responses = vanilla_retrieval(
@@ -198,7 +198,7 @@ class Evaluator:
             query_embedding,
             feedback,
             formula_params=formula_params,
-            limit=at_k,
+            limit=at_n,
             vector_name=vector_name,
             excluding_ids=responses_point_ids,  # excluding initial vanilla retrieval results used for feedback
         )
@@ -212,8 +212,8 @@ class Evaluator:
         )
 
         # Calculating custom above_threshold@N for relevance feedback–based retrieval
-        relevance_feedback_above_threshold_at_n = above_threshold_at_k(
-            golden_scores_relevance_feedback, threshold_score, k=at_k
+        relevance_feedback_above_threshold_at_n = above_threshold_at_n(
+            golden_scores_relevance_feedback, threshold_score, n=at_n
         )
 
         # 2nd iteration: vanilla retrieval (to compare against relevance feedback–based retrieval)
@@ -221,7 +221,7 @@ class Evaluator:
         vanilla_retrieval_responses = vanilla_retrieval(
             self.client,
             query_embedding,
-            limit=at_k,
+            limit=at_n,
             vector_name=vector_name,
             collection_name=self.collection_name,
             excluding_ids=responses_point_ids,  # excluding initial vanilla retrieval results used for feedback
@@ -232,8 +232,8 @@ class Evaluator:
             p.payload[payload_key] for p in vanilla_retrieval_responses
         ]
         golden_scores_vanilla = self.feedback.score(query, vanilla_retrieval_responses_content)
-        vanilla_above_threshold_at_n = above_threshold_at_k(
-            golden_scores_vanilla, threshold_score, k=at_k
+        vanilla_above_threshold_at_n = above_threshold_at_n(
+            golden_scores_vanilla, threshold_score, n=at_n
         )
 
         # Updating DCG win rate metric over eval queries
@@ -246,7 +246,7 @@ class Evaluator:
 
     def evaluate_queries(
         self,
-        at_k: int,
+        at_n: int,
         formula_params: dict[str, float],
         eval_queries: list[str] | None = None,
         amount_of_eval_queries: int | None = None,
@@ -256,7 +256,7 @@ class Evaluator:
     ) -> dict[str, int]:
         total_relevance_feedback = 0
         total_vanilla_retrieval = 0
-        dcg_win_rate = DcgWinRate(k=at_k)
+        dcg_win_rate = DcgWinRate(n=at_n)
 
         if (eval_queries is None) is (amount_of_eval_queries is None):
             raise ValueError("`eval_queries` OR `amount_of_eval_queries` have to be specified.")
@@ -285,7 +285,7 @@ class Evaluator:
                 formula_params=formula_params,
                 payload_key=self.payload_key,
                 dcg_win_rate=dcg_win_rate,
-                at_k=at_k,
+                at_n=at_n,
                 eval_context_limit=eval_context_limit,
             )
 

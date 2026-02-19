@@ -21,13 +21,14 @@ class _ModelType(StrEnum):
 
 
 class FastembedFeedback(Feedback):
-    def __init__(self, model_name: str, **kwargs: Any) -> None:
+    def __init__(self, model_name: str, score_options: dict[str, Any], **kwargs: Any) -> None:
         assert (
             fastembed is not None
         ), "FastembedFeedback requires `fastembed` package to be installed"
 
         self._model_name = model_name
         self._model = self._create_model(model_name, **kwargs)
+        self.score_options = score_options
 
         if isinstance(self._model, LateInteractionTextEmbedding):
             self._model_type = _ModelType.LateInteractionTextEmbedding
@@ -60,14 +61,14 @@ class FastembedFeedback(Feedback):
 
     def score(self, query: Any, responses: list[Any]) -> list[float]:
         if self._model_type == _ModelType.LateInteractionTextEmbedding:
-            return self._score_colbert(query, responses)
+            return self._score_colbert(query, responses, **self.score_options)
         elif self._model_type == _ModelType.TextCrossEncoder:
-            return self._score_cross_encoder(query, responses)
+            return self._score_cross_encoder(query, responses, **self.score_options)
         raise ValueError(f"Unsupported model: {self._model_type}")
 
-    def _score_colbert(self, query: Any, responses: list[Any]) -> list[float]:
-        query_embedded_with_feedback_model = list(self._model.query_embed(query))[0]
-        responses_embeded_with_feedback_model = list(self._model.embed(responses))
+    def _score_colbert(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        query_embedded_with_feedback_model = list(self._model.query_embed(query, **kwargs))[0]
+        responses_embeded_with_feedback_model = list(self._model.embed(responses, **kwargs))
 
         feedback_model_scores = []
         for response_embedding in responses_embeded_with_feedback_model:
@@ -77,8 +78,8 @@ class FastembedFeedback(Feedback):
 
         return feedback_model_scores
 
-    def _score_cross_encoder(self, query: Any, responses: list[Any]) -> list[float]:
-        return list(self._model.rerank(query, responses))
+    def _score_cross_encoder(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        return list(self._model.rerank(query, responses, **kwargs))
 
     @staticmethod
     def _max_sim_cosine(multivector_a: np.ndarray, multivector_b: np.ndarray) -> float:

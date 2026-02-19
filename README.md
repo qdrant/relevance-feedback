@@ -23,8 +23,8 @@ if __name__ == "__main__":
         api_key="your-api-key", 
         cloud_inference=True
     )
-    retriever = QdrantRetriever("sentence-transformers/all-minilm-l6-v2")
-    feedback = FastembedFeedback("Xenova/ms-marco-MiniLM-L-6-v2")
+    retriever = QdrantRetriever("sentence-transformers/all-minilm-l6-v2", embed_options={"lazy_load": True})  # lazy_load is just an example of propagating options, instead of loading a model into memory straightaway, it loads it on the first use
+    feedback = FastembedFeedback("Xenova/ms-marco-MiniLM-L-6-v2", score_options={"lazy_load": True})
     relevance_feedback = RelevanceFeedback(
         retriever=retriever, 
         feedback=feedback, 
@@ -48,7 +48,7 @@ Set `cloud_inference=True` to use cloud inference, `cloud_inference=False` or ju
 
 ### Retriever
 
-In order to use a custom retriever, you can define your class inherited from `Retriever` and override `retrieve` method.
+In order to use a custom retriever, you can define your class inherited from `Retriever` and override `embed_query` method.
 
 ```python
 from typing import Any
@@ -62,17 +62,19 @@ except ImportError:
 
 
 class OpenAIRetriever(Retriever):
-    def __init__(self, model_name: str, api_key: str, **kwargs: Any) -> None:
+    def __init__(self, model_name: str, api_key: str, embed_options: dict[str, Any] | None = None, **kwargs: Any) -> None:
         assert OpenAI is not None, 'OpenAIRetriever requires `openai` package to be installed`'
         self._client = OpenAI(api_key=api_key, **kwargs)
         self._model_name = model_name
+        self.embed_options = embed_options or {}
 
-    def retrieve(self, query: str, **kwargs: Any) -> list[float]:
+    def embed_query(self, query: str) -> list[float]:
         return self._client.embeddings.create(
             model=self._model_name,
             input=query,
-            **kwargs
+            **self.embed_options
         ).data[0].embedding
+
 ```
 
 ### Feedback model
@@ -88,28 +90,31 @@ try:
     import cohere
 except ImportError:
     cohere = None
-    
-    
+
+
 class CohereFeedback(Feedback):
-    def __init__(self, model_name: str, api_key: str):
+    def __init__(self, model_name: str, api_key: str, score_options: dict[str, Any] | None = None, **kwargs: Any):
         self._api_key = api_key
-        self._model_name = model_name
-
+        self._model_name = model_name  # E.g. "rerank-v4.0-pro"
+        self.score_options = score_options or {}
+        
         assert cohere is not None, "CohereFeedback requires `cohere` package"
-        self._client = cohere.ClientV2(api_key=api_key)
+        self._client = cohere.ClientV2(api_key=api_key, **kwargs)
 
-    def score(self, query: str, responses: list[str], **kwargs: Any) -> list[float]:
+    def score(self, query: str, responses: list[str]) -> list[float]:
         response = self._client.rerank(
             model=self._model_name,
             query=query,
             documents=responses,
             top_n=len(responses),
+            **self.score_options
         ).results
 
         feedback_model_scores = [
             item.relevance_score for item in sorted(response, key=lambda x: x.index)
         ]
         return feedback_model_scores
+
 ```
 
 ### Gathering all together
@@ -150,7 +155,7 @@ if __name__ == "__main__":
 ```python
 from relevance_feedback.evaluate import Evaluator
 
-N = 10  # as in metric@N
+n = 10  # as in metric@n
 EVAL_CONTEXT_LIMIT = 3  # top responses used for mining context pairs
 AMOUNT_OF_EVAL_QUERIES = 100
 
@@ -158,7 +163,7 @@ evaluator = Evaluator.from_relevance_feedback(relevance_feedback=relevance_feedb
 # Similar to `relevance_feedback.train`, you can provide your own set of predefined queries by passing `eval_queries=[<queries>]`, 
 # or use synthetic queries sampled from your collection. The number of synthetic queries is configured via `amount_of_eval_queries`.
 results = evaluator.evaluate_queries(
-    at_n=N,
+    at_n=n,
     formula_params=formula_params,
     amount_of_eval_queries=AMOUNT_OF_EVAL_QUERIES,   
     eval_context_limit=EVAL_CONTEXT_LIMIT
