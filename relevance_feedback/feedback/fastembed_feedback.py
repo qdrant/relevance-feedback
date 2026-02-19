@@ -7,12 +7,13 @@ from relevance_feedback.feedback import Feedback
 
 try:
     import fastembed
-    from fastembed import LateInteractionTextEmbedding, TextEmbedding
+    from fastembed import LateInteractionTextEmbedding, ImageEmbedding, TextEmbedding
     from fastembed.rerank.cross_encoder import TextCrossEncoder
 except ImportError:
     fastembed = None
     LateInteractionTextEmbedding = None
     TextCrossEncoder = None
+    ImageEmbedding = None
     TextEmbedding = None
 
 
@@ -20,6 +21,7 @@ class _ModelType(str, Enum):
     LateInteractionTextEmbedding = "LateInteractionTextEmbedding"
     TextCrossEncoder = "TextCrossEncoder"
     TextEmbedding = "TextEmbedding"
+    ImageEmbedding = "ImageEmbedding"
 
 
 class FastembedFeedback(Feedback):
@@ -38,15 +40,17 @@ class FastembedFeedback(Feedback):
             self._model_type = _ModelType.TextCrossEncoder
         elif isinstance(self._model, TextEmbedding):
             self._model_type = _ModelType.TextEmbedding
+        elif isinstance(self._model, ImageEmbedding):
+            self._model_type = _ModelType.ImageEmbedding
         else:
             raise ValueError(
-                f"Unsupported model: {model_name}, only LateInteractionTextEmbedding, TextCrossEncoder and TextEmbedding are supported"
+                f"Unsupported model: {model_name}, only LateInteractionTextEmbedding, TextCrossEncoder, TextEmbedding and ImageEmbedding are supported"
             )
 
     @staticmethod
     def _create_model(
         model_name: str, **kwargs: Any
-    ) -> "LateInteractionTextEmbedding | TextCrossEncoder | TextEmbedding":
+    ) -> "LateInteractionTextEmbedding | TextCrossEncoder | ImageEmbedding | TextEmbedding":
         assert (
             fastembed is not None
         ), "FastembedFeedback requires `fastembed` package to be installed"
@@ -69,8 +73,14 @@ class FastembedFeedback(Feedback):
         ]:
             return TextEmbedding(model_name, **kwargs)
 
+        if model_name.lower() in [
+            description["model"].lower()
+            for description in ImageEmbedding.list_supported_models()
+        ]:
+            return ImageEmbedding(model_name, **kwargs)
+
         raise ValueError(
-            f"Unsupported model: {model_name}, only LateInteractionTextEmbedding, TextCrossEncoder and TextEmbedding are supported"
+            f"Unsupported model: {model_name}, only LateInteractionTextEmbedding, TextCrossEncoder, TextEmbedding and ImageEmbedding are supported"
         )
 
     def score(self, query: Any, responses: list[Any]) -> list[float]:
@@ -80,6 +90,8 @@ class FastembedFeedback(Feedback):
             return self._score_cross_encoder(query, responses, **self.score_options)
         elif self._model_type == _ModelType.TextEmbedding:
             return self._score_text_embedding(query, responses, **self.score_options)
+        elif self._model_type == _ModelType.ImageEmbedding:
+            return self._score_image_embedding(query, responses, **self.score_options)
         raise ValueError(f"Unsupported model: {self._model_type}")
 
     def _score_text_embedding(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
@@ -95,7 +107,21 @@ class FastembedFeedback(Feedback):
 
         return feedback_model_scores
 
+    def _score_image_embedding(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        assert isinstance(self._model, ImageEmbedding)
+        query_embedded_with_feedback_model = list(self._model.embed(query, **kwargs))[0]
+        responses_embeded_with_feedback_model = list(self._model.embed(responses, **kwargs))
+
+        feedback_model_scores = []
+        for response_embedding in responses_embeded_with_feedback_model:
+            feedback_model_scores.append(
+                self._max_sim_cosine_1d(query_embedded_with_feedback_model, response_embedding)
+            )
+
+        return feedback_model_scores
+
     def _score_colbert(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        assert isinstance(self._model, LateInteractionTextEmbedding)
         query_embedded_with_feedback_model = list(self._model.query_embed(query, **kwargs))[0]
         responses_embeded_with_feedback_model = list(self._model.embed(responses, **kwargs))
 
@@ -108,6 +134,7 @@ class FastembedFeedback(Feedback):
         return feedback_model_scores
 
     def _score_cross_encoder(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        assert isinstance(self._model, TextCrossEncoder)
         return list(self._model.rerank(query, responses, **kwargs))
 
     @staticmethod
