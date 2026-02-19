@@ -197,14 +197,13 @@ class Evaluator:
         # The goal is to retrieve results that are more relevant than this one (as judged by the feedback model)
         threshold_score = max(feedback_model_scores)
 
-        # 2nd iteration: relevance feedback–based retrieval
+        # 2nd iteration: relevance feedback–based retrieval (point IDs from `feedback` will be automatically excluded from results)
         relevance_feedback_responses = self.relevance_feedback_retrieval(
             query_embedding,
             feedback,
             formula_params=formula_params,
             limit=at_n,
-            vector_name=vector_name,
-            excluding_ids=responses_point_ids,  # excluding initial vanilla retrieval results used for feedback
+            vector_name=vector_name
         )
 
         # Getting golden scores to calculate the custom abovethreshold@N metric
