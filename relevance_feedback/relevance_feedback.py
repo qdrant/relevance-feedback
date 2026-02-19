@@ -254,7 +254,7 @@ class RelevanceFeedback:
         patience: int = 200,
         min_delta: float = 1e-6,
     ) -> dict[str, float]:
-        """Train relevance feedback weights
+        """Train relevance feedback naive formula parameters.
 
         Args:
             limit (int): Number of responses to retrieve per query.
