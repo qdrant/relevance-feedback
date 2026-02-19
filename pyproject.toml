@@ -1,12 +1,17 @@
 [project]
 name = "relevance_feedback"
 version = "0.1.0"
-authors = ["Qdrant Team <info@qdrant.tech>", "Evgeniya Sukhodolskaya <evgeniya.sukhodolskaya@qdrant.tech>", "George Panchuk <george.panchuk@qdrant.tech>"]
+authors = [
+  { name = "Qdrant Team", email = "info@qdrant.tech" },
+  { name = "Evgeniya Sukhodolskaya", email = "evgeniya.sukhodolskaya@qdrant.tech" },
+  { name = "George Panchuk", email = "george.panchuk@qdrant.tech" }
+]
 description = "Qdrant's relevance feedback model training"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "pandas>=3.0.0",
+    "pandas>=3.0.0; python_version>='3.11'",
+    "pandas>=2.3.3,<3.0.0; python_version<'3.11'",
     "qdrant-client>=1.16.2",
     "torch>=2.9.1",
     "tqdm>=4.67.3",
