@@ -98,7 +98,6 @@ class Evaluator:
         query: Any,
         vector_name: str | None,
         formula_params: dict[str, float],
-        payload_key: str | None,
         dcg_win_rate: DcgWinRate,
         at_n: int = 10,  # metric@n
         eval_context_limit: int = 3,
@@ -120,7 +119,6 @@ class Evaluator:
             query (any): Original query (e.g., text, image, audio).
             vector_name (Optional[str]): Named vector handle, or None for the default vector.
             formula_params (Dict[str, float]): Trained parameters of the relevance feedback formula.
-            payload_key (Optional[str]): Payload key in Qdrant collection referring to the original data you're retrieving.
             dcg_win_rate (DcgWinRate): DCG win rate tracker.
             at_n (int): Number of results to evaluate metrics on (@n).
             eval_context_limit (int): Number of initial top responses used for relevance feedback.
@@ -146,13 +144,6 @@ class Evaluator:
             vector_name=vector_name,
             collection_name=self.relevance_feedback.collection_name,
         )
-
-        if payload_key is None:
-            raise ValueError(
-                "If your raw data is NOT stored in the payload (e.g., stored externally),"
-                "override `retrieve_payload`, by mapping response IDs"
-                "to your external data storage (preserving order)."
-            )
 
         # ----------------------Note: ---------------------------------------------
         # If your raw data is NOT stored in the payload (e.g., stored externally),
@@ -185,9 +176,7 @@ class Evaluator:
         )
 
         # Getting golden scores to calculate the custom abovethreshold@N metric
-        relevance_feedback_responses_content = [
-            p.payload[payload_key] for p in relevance_feedback_responses
-        ]
+        relevance_feedback_responses_content = self.relevance_feedback.retrieve_payload(relevance_feedback_responses)
         golden_scores_relevance_feedback = self.relevance_feedback.feedback.score(
             query, relevance_feedback_responses_content
         )
@@ -209,9 +198,7 @@ class Evaluator:
         )
 
         # Getting golden scores to calculate the custom abovethreshold@N metric
-        vanilla_retrieval_responses_content = [
-            p.payload[payload_key] for p in vanilla_retrieval_responses
-        ]
+        vanilla_retrieval_responses_content =  self.relevance_feedback.retrieve_payload(vanilla_retrieval_responses)
         golden_scores_vanilla = self.relevance_feedback.feedback.score(
             query, vanilla_retrieval_responses_content
         )
@@ -270,7 +257,6 @@ class Evaluator:
                 query,
                 vector_name=vector_name,
                 formula_params=formula_params,
-                payload_key=self.relevance_feedback.payload_key,
                 dcg_win_rate=dcg_win_rate,
                 at_n=at_n,
                 eval_context_limit=eval_context_limit,
