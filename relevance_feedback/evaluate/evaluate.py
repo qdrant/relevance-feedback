@@ -35,7 +35,7 @@ class Evaluator:
 
         self.exclude_synthetic_queries_ids = exclude_synthetic_queries_ids
 
-        if isinstance(self._client._client, QdrantLocal):
+        if isinstance(self.client._client, QdrantLocal):
             raise TypeError(
                 "RelevanceFeedback currently works only with a hosted Qdrant (e.g. in Docker or Qdrant Cloud) "
                 "and does not support local mode (':memory:', or path=...)"
@@ -82,6 +82,10 @@ class Evaluator:
         else:
             id_filter = None
 
+
+        if not self.client.cloud_inference:
+            query_embedding = next(iter(self.client._embed_models(query_embedding, is_query=True, batch_size=self.client.local_inference_batch_size)))
+
         feedback_query = {
             "relevance_feedback": {
                 "target": query_embedding,
@@ -91,7 +95,7 @@ class Evaluator:
         }
 
         response = requests.post(
-            url=f"{self._client._client.url}/collections/{self.collection_name}/points/query",
+            url=f"{self.client._client.rest_uri}/collections/{self.collection_name}/points/query",
             json={
                 "query": feedback_query,
                 "filter": id_filter,
@@ -108,7 +112,7 @@ class Evaluator:
         return points
 
     def _retrieve_payload(self, responses: list[models.ScoredPoint]):
-        responses_content = [p.payload[self._payload_key] for p in responses]
+        responses_content = [p.payload[self.payload_key] for p in responses]
         return responses_content
 
     def evaluate_query(
