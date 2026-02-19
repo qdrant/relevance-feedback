@@ -21,14 +21,14 @@ class _ModelType(StrEnum):
 
 
 class FastembedFeedback(Feedback):
-    def __init__(self, model_name: str, score_options: dict[str, Any], **kwargs: Any) -> None:
+    def __init__(self, model_name: str, score_options: dict[str, Any] | None = None, **kwargs: Any) -> None:
         assert (
             fastembed is not None
         ), "FastembedFeedback requires `fastembed` package to be installed"
 
         self._model_name = model_name
         self._model = self._create_model(model_name, **kwargs)
-        self.score_options = score_options
+        self.score_options = score_options or {}
 
         if isinstance(self._model, LateInteractionTextEmbedding):
             self._model_type = _ModelType.LateInteractionTextEmbedding
