@@ -1,20 +1,22 @@
 from typing import Any
 
 import pandas as pd
-import tqdm
-from qdrant_client import models, QdrantClient
+import rich
+from qdrant_client import QdrantClient, models
 from qdrant_client.local.qdrant_local import QdrantLocal
+from rich.progress import track
 
 from relevance_feedback.feedback import Feedback
 from relevance_feedback.retriever import Retriever
+from relevance_feedback.train.naive_formula import NaiveFormula
 from relevance_feedback.train.train import (
-    vanilla_retrieval,
     get_context_pairs,
     get_similarity_score,
     get_synthetic_queries,
+    split_train_val,
+    train_formula,
+    vanilla_retrieval,
 )
-from relevance_feedback.train.naive_formula import NaiveFormula
-from relevance_feedback.train.train import split_train_val, train_formula
 
 
 class RelevanceFeedback:
@@ -126,7 +128,6 @@ class RelevanceFeedback:
         for response_idx, (response, feedback_model_score) in enumerate(
             zip(responses, feedback_model_scores)
         ):
-
             if vector_name:
                 response_embedding = response.vector[vector_name]
             else:
@@ -200,8 +201,11 @@ class RelevanceFeedback:
 
         results = []
 
-        for query_idx, query in tqdm.tqdm(enumerate(queries), desc="Processing queries"):
-            print(f"Processing query {query_idx + 1}/{len(queries)}")
+        rich.print("[bold]Building training data")
+        for query_idx, query in track(
+            enumerate(queries), total=len(queries), description="Processing queries"
+        ):
+            rich.print(f"Processing query {query_idx + 1}/{len(queries)}")
 
             query_results = self.prepare_train_data_query(
                 query_idx,
@@ -228,7 +232,9 @@ class RelevanceFeedback:
         # Response with higher target_score should rank higher.
         # A positive target_score means the response is more relevant
         # than all that feedback model has "seen" (within the context limit).
-        results["target_score"] = results["feedback_model_score"] - results["threshold_score"]
+        results["target_score"] = (
+            results["feedback_model_score"] - results["threshold_score"]
+        )
 
         # Train only on responses outside the context limit
         train_data = results[results["response_idx"] >= context_limit].copy()
@@ -288,6 +294,10 @@ class RelevanceFeedback:
             context_limit=context_limit,
             confidence_margin=confidence_margin,
         )
+        rich.print(
+            f"On {training_data[training_data.target_score > 0].groupby('query_idx').ngroups / len(queries) * 100:.2f}% "
+            "of training queries the feedback model strongly disagreed with the retriever model."
+        )
 
         (
             scores_train,
@@ -303,6 +313,7 @@ class RelevanceFeedback:
             responses_per_query=limit - context_limit,
         )
 
+        rich.print("[bold]Training")
         trained_formula = train_formula(
             NaiveFormula(),
             scores_train,

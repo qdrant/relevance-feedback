@@ -1,10 +1,10 @@
 from typing import Any
 
 import requests
-import tqdm
+import rich
 from qdrant_client import QdrantClient, models
 from qdrant_client.local.qdrant_local import QdrantLocal
-
+from rich.progress import track
 
 from relevance_feedback import RelevanceFeedback
 from relevance_feedback.evaluate.metrics import (
@@ -14,7 +14,7 @@ from relevance_feedback.evaluate.metrics import (
 )
 from relevance_feedback.feedback import Feedback
 from relevance_feedback.retriever import Retriever
-from relevance_feedback.train.train import vanilla_retrieval, get_synthetic_queries
+from relevance_feedback.train.train import get_synthetic_queries, vanilla_retrieval
 
 
 class Evaluator:
@@ -278,10 +278,10 @@ class Evaluator:
             )
             eval_queries = self._retrieve_payload(eval_synthetic_queries)
 
-        for query_idx, query in tqdm.tqdm(
-            enumerate(eval_queries), total=len(eval_queries), desc="Evaluating queries"
+        for query_idx, query in track(
+            enumerate(eval_queries), total=len(eval_queries), description="Evaluating queries"
         ):
-            print(f"Evaluating query {query_idx + 1}/{len(eval_queries)}")
+            rich.print(f"Evaluating query {query_idx + 1}/{len(eval_queries)}")
 
             eval_results = self.evaluate_query(
                 query,
