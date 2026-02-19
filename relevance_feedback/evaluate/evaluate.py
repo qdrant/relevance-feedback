@@ -2,7 +2,7 @@ from typing import Any
 
 import requests
 import rich
-from qdrant_client import QdrantClient, models
+from qdrant_client import models
 from qdrant_client.local.qdrant_local import QdrantLocal
 from rich.progress import track
 
@@ -12,45 +12,18 @@ from relevance_feedback.evaluate.metrics import (
     above_threshold_at_n,
     relative_relevance_gain,
 )
-from relevance_feedback.feedback import Feedback
-from relevance_feedback.retriever import Retriever
 from relevance_feedback.train.train import get_synthetic_queries, vanilla_retrieval
 
 
 class Evaluator:
-    def __init__(
-        self,
-        retriever: Retriever,
-        feedback: Feedback,
-        client: QdrantClient,
-        collection_name: str,
-        payload_key: str | None = None,
-        exclude_synthetic_queries_ids: list[str] | None = None,
-    ):
-        self.retriever = retriever
-        self.feedback = feedback
-        self.client = client
-        self.collection_name = collection_name
-        self.payload_key = payload_key
+    def __init__(self, relevance_feedback: RelevanceFeedback):
+        self.relevance_feedback = relevance_feedback
 
-        self.exclude_synthetic_queries_ids = exclude_synthetic_queries_ids
-
-        if isinstance(self.client._client, QdrantLocal):
+        if isinstance(self.relevance_feedback.client._client, QdrantLocal):
             raise TypeError(
                 "RelevanceFeedback currently works only with a hosted Qdrant (e.g. in Docker or Qdrant Cloud) "
                 "and does not support local mode (':memory:', or path=...)"
             )
-
-    @classmethod
-    def from_relevance_feedback(cls, relevance_feedback: RelevanceFeedback) -> "Evaluator":
-        return Evaluator(
-            retriever=relevance_feedback.retriever,
-            feedback=relevance_feedback.feedback,
-            client=relevance_feedback.client,
-            payload_key=relevance_feedback.payload_key,
-            collection_name=relevance_feedback.collection_name,
-            exclude_synthetic_queries_ids=relevance_feedback.synthetic_queries_ids,
-        )
 
     def relevance_feedback_retrieval(
         self,
@@ -82,20 +55,29 @@ class Evaluator:
         else:
             id_filter = None
 
-
-        if not self.client.cloud_inference:
-            query_embedding = next(iter(self.client._embed_models(query_embedding, is_query=True, batch_size=self.client.local_inference_batch_size)))
+        if not self.relevance_feedback.client.cloud_inference:
+            query_embedding = next(
+                iter(
+                    self.relevance_feedback.client._embed_models(
+                        query_embedding,
+                        is_query=True,
+                        batch_size=self.relevance_feedback.client.local_inference_batch_size,
+                    )
+                )
+            )
 
         feedback_query = {
             "relevance_feedback": {
                 "target": query_embedding,
-                "feedback": [{"example": example, "score": score} for example, score in feedback],
+                "feedback": [
+                    {"example": example, "score": score} for example, score in feedback
+                ],
                 "strategy": {"naive": formula_params},
             }
         }
 
         response = requests.post(
-            url=f"{self.client._client.rest_uri}/collections/{self.collection_name}/points/query",
+            url=f"{self.relevance_feedback.client._client.rest_uri}/collections/{self.relevance_feedback.collection_name}/points/query",
             json={
                 "query": feedback_query,
                 "filter": id_filter,
@@ -110,10 +92,6 @@ class Evaluator:
         points = [models.ScoredPoint(**point) for point in result["points"]]
 
         return points
-
-    def _retrieve_payload(self, responses: list[models.ScoredPoint]):
-        responses_content = [p.payload[self.payload_key] for p in responses]
-        return responses_content
 
     def evaluate_query(
         self,
@@ -158,15 +136,15 @@ class Evaluator:
             - If raw data is not in the payload, map point IDs to external storage before rescoring.
         """
 
-        query_embedding = self.retriever.embed_query(query)
+        query_embedding = self.relevance_feedback.retriever.embed_query(query)
 
         # Initial vanilla retrieval
         responses = vanilla_retrieval(
-            self.client,
+            self.relevance_feedback.client,
             query_embedding,
             limit=eval_context_limit,
             vector_name=vector_name,
-            collection_name=self.collection_name,
+            collection_name=self.relevance_feedback.collection_name,
         )
 
         if payload_key is None:
@@ -183,10 +161,10 @@ class Evaluator:
         # by mapping `response_point_ids` to your external data storage (preserving order).
         # -------------------------------------------------------------------------
 
-        responses_content = self._retrieve_payload(responses)
+        responses_content = self.relevance_feedback.retrieve_payload(responses)
 
         # Getting feedback
-        feedback_model_scores = self.feedback.score(query, responses_content)
+        feedback_model_scores = self.relevance_feedback.feedback.score(query, responses_content)
         responses_point_ids = [p.id for p in responses]
         feedback = [
             (point_id, score)
@@ -203,14 +181,14 @@ class Evaluator:
             feedback,
             formula_params=formula_params,
             limit=at_n,
-            vector_name=vector_name
+            vector_name=vector_name,
         )
 
         # Getting golden scores to calculate the custom abovethreshold@N metric
         relevance_feedback_responses_content = [
             p.payload[payload_key] for p in relevance_feedback_responses
         ]
-        golden_scores_relevance_feedback = self.feedback.score(
+        golden_scores_relevance_feedback = self.relevance_feedback.feedback.score(
             query, relevance_feedback_responses_content
         )
 
@@ -222,11 +200,11 @@ class Evaluator:
         # 2nd iteration: vanilla retrieval (to compare against relevance feedback–based retrieval)
         # Top results with ranks from EVAL_CONTEXT_LIMIT to N + EVAL_CONTEXT_LIMIT
         vanilla_retrieval_responses = vanilla_retrieval(
-            self.client,
+            self.relevance_feedback.client,
             query_embedding,
             limit=at_n,
             vector_name=vector_name,
-            collection_name=self.collection_name,
+            collection_name=self.relevance_feedback.collection_name,
             excluding_ids=responses_point_ids,  # excluding initial vanilla retrieval results used for feedback
         )
 
@@ -234,7 +212,9 @@ class Evaluator:
         vanilla_retrieval_responses_content = [
             p.payload[payload_key] for p in vanilla_retrieval_responses
         ]
-        golden_scores_vanilla = self.feedback.score(query, vanilla_retrieval_responses_content)
+        golden_scores_vanilla = self.relevance_feedback.feedback.score(
+            query, vanilla_retrieval_responses_content
+        )
         vanilla_above_threshold_at_n = above_threshold_at_n(
             golden_scores_vanilla, threshold_score, n=at_n
         )
@@ -262,23 +242,27 @@ class Evaluator:
         dcg_win_rate = DcgWinRate(n=at_n)
 
         if (eval_queries is None) is (amount_of_eval_queries is None):
-            raise ValueError("`eval_queries` OR `amount_of_eval_queries` have to be specified.")
+            raise ValueError(
+                "`eval_queries` OR `amount_of_eval_queries` have to be specified."
+            )
 
         if eval_queries is None:
             eval_synthetic_queries = get_synthetic_queries(
-                self.client,
-                collection_name=self.collection_name,
+                self.relevance_feedback.client,
+                collection_name=self.relevance_feedback.collection_name,
                 limit=amount_of_eval_queries,
                 excluding_ids=(
                     exclude_synthetic_queries_ids
                     if exclude_synthetic_queries_ids is not None
-                    else self.exclude_synthetic_queries_ids
+                    else self.relevance_feedback.synthetic_queries_ids
                 ),
             )
-            eval_queries = self._retrieve_payload(eval_synthetic_queries)
+            eval_queries = self.relevance_feedback.retrieve_payload(eval_synthetic_queries)
 
         for query_idx, query in track(
-            enumerate(eval_queries), total=len(eval_queries), description="Evaluating queries"
+            enumerate(eval_queries),
+            total=len(eval_queries),
+            description="Evaluating queries",
         ):
             rich.print(f"Evaluating query {query_idx + 1}/{len(eval_queries)}")
 
@@ -286,7 +270,7 @@ class Evaluator:
                 query,
                 vector_name=vector_name,
                 formula_params=formula_params,
-                payload_key=self.payload_key,
+                payload_key=self.relevance_feedback.payload_key,
                 dcg_win_rate=dcg_win_rate,
                 at_n=at_n,
                 eval_context_limit=eval_context_limit,

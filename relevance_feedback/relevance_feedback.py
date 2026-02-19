@@ -41,7 +41,7 @@ class RelevanceFeedback:
                 "and does not support local mode (':memory:', or path=...)"
             )
 
-    def _retrieve_payload(self, responses: list[models.ScoredPoint]):
+    def retrieve_payload(self, responses: list[models.ScoredPoint]):
         responses_content = [p.payload[self.payload_key] for p in responses]
         return responses_content
 
@@ -103,7 +103,7 @@ class RelevanceFeedback:
                 "to your external data storage (preserving order)."
             )
 
-        responses_content = self._retrieve_payload(responses)
+        responses_content = self.retrieve_payload(responses)
         feedback_model_scores = self.feedback.score(query, responses_content)
 
         context_pairs = get_context_pairs(
@@ -282,7 +282,7 @@ class RelevanceFeedback:
                 limit=amount_of_queries,
             )
             self.synthetic_queries_ids = [point.id for point in synthetic_queries]
-            queries = self._retrieve_payload(synthetic_queries)
+            queries = self.retrieve_payload(synthetic_queries)
         else:
             self.synthetic_queries_ids = None
 
