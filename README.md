@@ -17,6 +17,10 @@ from relevance_feedback.retriever import QdrantRetriever
 if __name__ == "__main__":
     RETRIEVER_VECTOR_NAME = None # your named vector handle in Qdrant's collection or None if it's a default vector
     COLLECTION_NAME = "document_collection"
+
+    # these two parameters affect the cost and time of data collection for training
+    LIMIT = 50 # responses per query
+    CONTEXT_LIMIT = 5 # top responses used for mining context pairs
     
     client = QdrantClient(
         url="https://xyz-example.eu-central.aws.cloud.qdrant.io",
@@ -37,6 +41,8 @@ if __name__ == "__main__":
         queries=None,  # if you have specific queries for training, provide a list here
         amount_of_queries=200,  # otherwise, you can specify amount of synthetic queries - documents sampled from your collection
         vector_name=RETRIEVER_VECTOR_NAME,
+        limit=LIMIT,
+        context_limit=CONTEXT_LIMIT,
     )
     print('weights are: ', weights)
 ```
@@ -130,6 +136,8 @@ from relevance_feedback import RelevanceFeedback
 if __name__ == "__main__":
     RETRIEVER_VECTOR_NAME = None
     COLLECTION_NAME = "document_collection"
+    LIMIT = 50
+    CONTEXT_LIMIT = 5
     client = QdrantClient()
     retriever = OpenAIRetriever("text-embedding-3-small", api_key="<your openai api key>")
     feedback = CohereFeedback("rerank-v4.0-pro", api_key="<your cohere api key")
@@ -145,6 +153,8 @@ if __name__ == "__main__":
     formula_params = relevance_feedback.train(
         queries=None,
         vector_name=RETRIEVER_VECTOR_NAME,
+        limit=LIMIT,
+        context_limit=CONTEXT_LIMIT,
     )
     print('formula params are: ', formula_params)
 ```
