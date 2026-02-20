@@ -37,12 +37,6 @@ class RelevanceFeedback:
         self.vector_name = vector_name
         self.synthetic_queries_ids: list[str] | None = None
 
-        if isinstance(self.client._client, QdrantLocal):
-            raise TypeError(
-                "RelevanceFeedback currently works only with a hosted Qdrant (e.g. in Docker or Qdrant Cloud) "
-                "and does not support local mode (':memory:', or path=...)"
-            )
-
     def retrieve_payload(self, responses: list[models.ScoredPoint]):
         if self.payload_key is None:
             raise ValueError(

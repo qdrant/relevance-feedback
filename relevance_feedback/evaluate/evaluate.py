@@ -1,9 +1,7 @@
 from typing import Any
 
-import requests
 import rich
 from qdrant_client import models
-from qdrant_client.local.qdrant_local import QdrantLocal
 from rich.progress import track
 
 from relevance_feedback import RelevanceFeedback
@@ -18,12 +16,6 @@ from relevance_feedback.train.train import get_synthetic_queries, vanilla_retrie
 class Evaluator:
     def __init__(self, relevance_feedback: RelevanceFeedback):
         self.relevance_feedback = relevance_feedback
-
-        if isinstance(self.relevance_feedback.client._client, QdrantLocal):
-            raise TypeError(
-                "RelevanceFeedback currently works only with a hosted Qdrant (e.g. in Docker or Qdrant Cloud) "
-                "and does not support local mode (':memory:', or path=...)"
-            )
 
     def relevance_feedback_retrieval(
         self,
@@ -49,47 +41,34 @@ class Evaluator:
             List[models.ScoredPoint]: A list of points scored with the relevance feedback formula.
         """
         if excluding_ids is not None and len(excluding_ids) > 0:
-            id_filter = {"must_not": {"has_id": [id_ for id_ in excluding_ids]}}
-        else:
-            id_filter = None
-
-        if not self.relevance_feedback.client.cloud_inference:
-            query_embedding = next(
-                iter(
-                    self.relevance_feedback.client._embed_models(
-                        query_embedding,
-                        is_query=True,
-                        batch_size=self.relevance_feedback.client.local_inference_batch_size,
-                    )
-                )
+            query_filter = models.Filter(
+                must_not=[
+                    models.HasIdCondition(has_id=excluding_ids)
+                ]
             )
+        else:
+            query_filter = None
 
-        feedback_query = {
-            "relevance_feedback": {
-                "target": query_embedding,
-                "feedback": [
-                    {"example": example, "score": score} for example, score in feedback
-                ],
-                "strategy": {"naive": formula_params},
-            }
-        }
-
-        response = requests.post(
-            url=f"{self.relevance_feedback.client._client.rest_uri}/collections/{self.relevance_feedback.collection_name}/points/query",
-            json={
-                "query": feedback_query,
-                "filter": id_filter,
-                "with_payload": True,
-                "with_vectors": False,
-                "limit": limit,
-                "using": self.relevance_feedback.vector_name,
-            },
-        )
-
-        result = response.json()["result"]
-        points = [models.ScoredPoint(**point) for point in result["points"]]
-
-        return points
+        return self.relevance_feedback.client.query_points(
+            collection_name=self.relevance_feedback.collection_name,
+            query=models.RelevanceFeedbackQuery(
+                relevance_feedback=models.RelevanceFeedbackInput(
+                    target=query_embedding,
+                    feedback=[
+                        models.FeedbackItem(example=example, score=score)
+                        for example, score in feedback
+                    ],
+                    strategy=models.NaiveFeedbackStrategy(
+                        naive=models.NaiveFeedbackStrategyParams(**formula_params)
+                    ),
+                )
+            ),
+            query_filter=query_filter,
+            with_vectors=True,
+            with_payload=True,
+            limit=limit,
+            using=self.relevance_feedback.vector_name,
+        ).points
 
     def evaluate_query(
         self,
