@@ -219,13 +219,13 @@ if __name__ == "__main__":
         vector_name=RETRIEVER_VECTOR_NAME,
     )
 
-    weights = relevance_feedback.train(
+    formula_params = relevance_feedback.train(
         queries=None,  # if you have specific queries for training, provide a list here
         amount_of_queries=200,  # otherwise, you can specify amount of synthetic queries - documents sampled from your collection
         limit=LIMIT,
         context_limit=CONTEXT_LIMIT,
     )
-    print('weights are: ', weights)
+    print('formula params are: ', formula_params)
 ```
 
 ## Evaluation
