@@ -57,30 +57,6 @@ This key should refer to the raw data, which, after being embedded, is used in Q
 
 If you're storing original data externally to Qdrant's collection, you should override `retrieve_payload` method of `RelevanceFeedback` class.
 
-## Evaluation
-
-Evaluates the trained naive formula on two metrics: **relative gain** based on **abovethreshold@N** and **Discounted Cumulative Gain (DCG) Win Rate@N**.
-
-> Detailed explanation of these metrics and their meaning can be found in the ["Relevance Feedback in Qdrant"](https://qdrant.tech/articles/relevance-feedback/) article.
-
-```python
-from qdrant_relevance_feedback.evaluate import Evaluator
-
-n = 10  # as in metric@n
-EVAL_CONTEXT_LIMIT = 3  # top responses used for mining context pairs (what you'll use in production for you retrieval pipelines)
-
-evaluator = Evaluator(relevance_feedback=relevance_feedback)
-# Similar to `relevance_feedback.train`, you can provide your own set of predefined queries by passing `eval_queries=[<queries>]`, 
-# or use synthetic queries sampled from your collection.
-results = evaluator.evaluate_queries(
-    at_n=n,
-    formula_params=formula_params,
-    eval_queries=None,
-    amount_of_eval_queries=100,   
-    eval_context_limit=EVAL_CONTEXT_LIMIT
-)
-```
-
 ## Adding your own models
 
 ### Retriever
@@ -262,4 +238,28 @@ if __name__ == "__main__":
         context_limit=CONTEXT_LIMIT,
     )
     print('formula params are: ', formula_params)
+```
+
+## Evaluation
+
+Evaluates the trained naive formula on two metrics: **relative gain** based on **abovethreshold@N** and **Discounted Cumulative Gain (DCG) Win Rate@N**.
+
+> Detailed explanation of these metrics and their meaning can be found in the ["Relevance Feedback in Qdrant"](https://qdrant.tech/articles/relevance-feedback/) article.
+
+```python
+from qdrant_relevance_feedback.evaluate import Evaluator
+
+n = 10  # as in metric@n
+EVAL_CONTEXT_LIMIT = 3  # top responses used for mining context pairs (what you'll use in production for you retrieval pipelines)
+
+evaluator = Evaluator(relevance_feedback=relevance_feedback)
+# Similar to `relevance_feedback.train`, you can provide your own set of predefined queries by passing `eval_queries=[<queries>]`, 
+# or use synthetic queries sampled from your collection.
+results = evaluator.evaluate_queries(
+    at_n=n,
+    formula_params=formula_params,
+    eval_queries=None,
+    amount_of_eval_queries=100,   
+    eval_context_limit=EVAL_CONTEXT_LIMIT
+)
 ```
