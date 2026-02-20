@@ -160,6 +160,74 @@ if __name__ == "__main__":
 ```
 
 
+## Images
+
+If you have a collection of images, represented by `image_url` and `file_name` payload fields, payload retrieval is more complicated, as `qdrant_client` and `fastembed` expect images to be paths to files on disk. In cases like this you can override `retrieve_payload` entirely. Here is an example that downloads images to disk and returns their file path. Note, that you'll also have to tell `QdrantRetriever` that you are dealing with images, not text.
+
+```python
+import os
+import shutil
+from pathlib import Path
+
+import requests
+from qdrant_client import QdrantClient, models
+
+from relevance_feedback import RelevanceFeedback
+from relevance_feedback.feedback import FastembedFeedback
+from relevance_feedback.retriever import QdrantRetriever
+
+
+class RelevanceFeedbackImageCache(RelevanceFeedback):
+    def retrieve_payload(self, responses: list[models.ScoredPoint]):
+        cache_dir = (
+            Path(os.getenv("XDG_CACHE_HOME", "~/.cache")).expanduser()
+            / "relevance_feedback"
+        )
+        cache_dir.mkdir(exist_ok=True, parents=True)
+
+        responses_content = []
+        for p in responses:
+            if not (cache_dir / p.payload["file_name"]).is_file():
+                with (cache_dir / p.payload["file_name"]).open("wb") as f:
+                    shutil.copyfileobj(
+                        requests.get(p.payload["image_url"], stream=True).raw, f
+                    )
+            responses_content.append(str(cache_dir / p.payload["file_name"]))
+        return responses_content
+
+
+if __name__ == "__main__":
+    RETRIEVER_VECTOR_NAME = None
+    COLLECTION_NAME = "image_collection"
+
+    # these two parameters affect the cost and time of data collection for training
+    LIMIT = 50 # responses per query
+    CONTEXT_LIMIT = 5 # top responses used for mining context pairs
+    
+    client = QdrantClient(
+        url="https://xyz-example.eu-central.aws.cloud.qdrant.io",
+        api_key="your-api-key", 
+        cloud_inference=True
+    )
+    retriever = QdrantRetriever("Qdrant/clip-ViT-B-32-vision", embed_options={"lazy_load": True}, modality="image")  # lazy_load is just an example of propagating options, instead of loading a model into memory straightaway, it loads it on the first use
+    feedback = FastembedFeedback("Qdrant/colpali-v1.3-fp16", score_options={"lazy_load": True})
+    relevance_feedback = RelevanceFeedback(
+        retriever=retriever, 
+        feedback=feedback, 
+        client=client, 
+        collection_name=COLLECTION_NAME, 
+    )
+
+    weights = relevance_feedback.train(
+        queries=None,  # if you have specific queries for training, provide a list here
+        amount_of_queries=200,  # otherwise, you can specify amount of synthetic queries - documents sampled from your collection
+        vector_name=RETRIEVER_VECTOR_NAME,
+        limit=LIMIT,
+        context_limit=CONTEXT_LIMIT,
+    )
+    print('weights are: ', weights)
+```
+
 ## Evaluation
 
 ```python
@@ -169,7 +237,7 @@ n = 10  # as in metric@n
 EVAL_CONTEXT_LIMIT = 3  # top responses used for mining context pairs
 AMOUNT_OF_EVAL_QUERIES = 100
 
-evaluator = Evaluator.from_relevance_feedback(relevance_feedback=relevance_feedback)
+evaluator = Evaluator(relevance_feedback=relevance_feedback)
 # Similar to `relevance_feedback.train`, you can provide your own set of predefined queries by passing `eval_queries=[<queries>]`, 
 # or use synthetic queries sampled from your collection. The number of synthetic queries is configured via `amount_of_eval_queries`.
 results = evaluator.evaluate_queries(
