@@ -211,7 +211,7 @@ if __name__ == "__main__":
     )
     retriever = QdrantRetriever("Qdrant/clip-ViT-B-32-vision", modality="image", embed_options={"lazy_load": True})  # lazy_load is just an example of propagating options, instead of loading a model into memory straightaway, it loads it on the first use
     feedback = FastembedFeedback("Qdrant/colpali-v1.3-fp16", score_options={"lazy_load": True})
-    relevance_feedback = RelevanceFeedback(
+    relevance_feedback = RelevanceFeedbackImageCache(
         retriever=retriever, 
         feedback=feedback, 
         client=client, 
