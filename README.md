@@ -34,13 +34,13 @@ if __name__ == "__main__":
         feedback=feedback, 
         client=client, 
         collection_name=COLLECTION_NAME, 
+        vector_name=RETRIEVER_VECTOR_NAME,
         payload_key="document"
     )
 
     formula_params = relevance_feedback.train(
         queries=None,  # if you have specific queries for training, provide a list here
         amount_of_queries=200,  # otherwise, you can specify amount of synthetic queries - documents sampled from your collection
-        vector_name=RETRIEVER_VECTOR_NAME,
         limit=LIMIT,
         context_limit=CONTEXT_LIMIT,
     )
@@ -147,12 +147,12 @@ if __name__ == "__main__":
         feedback=feedback, 
         client=client, 
         collection_name=COLLECTION_NAME, 
+        vector_name=RETRIEVER_VECTOR_NAME,
         payload_key="document"
     )
 
     formula_params = relevance_feedback.train(
         queries=None,
-        vector_name=RETRIEVER_VECTOR_NAME,
         limit=LIMIT,
         context_limit=CONTEXT_LIMIT,
     )
@@ -216,12 +216,12 @@ if __name__ == "__main__":
         feedback=feedback, 
         client=client, 
         collection_name=COLLECTION_NAME, 
+        vector_name=RETRIEVER_VECTOR_NAME,
     )
 
     weights = relevance_feedback.train(
         queries=None,  # if you have specific queries for training, provide a list here
         amount_of_queries=200,  # otherwise, you can specify amount of synthetic queries - documents sampled from your collection
-        vector_name=RETRIEVER_VECTOR_NAME,
         limit=LIMIT,
         context_limit=CONTEXT_LIMIT,
     )

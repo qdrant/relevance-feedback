@@ -31,7 +31,6 @@ class Evaluator:
         feedback: list[tuple[models.ExtendedPointId | models.Vector, float]],
         formula_params: dict[str, float],
         limit: int,
-        vector_name: str,
         excluding_ids: list[models.ExtendedPointId] | None = None,
     ) -> list[models.ScoredPoint]:
         """
@@ -44,7 +43,6 @@ class Evaluator:
                 is used to provide relevance feedback signals to the relevance feedback formula.
             formula_params (Dict[str, float]): Trained parameters of the relevance feedback formula.
             limit (int): The number of points to retrieve.
-            vector_name (str): Named vector handle or None if it's a default vector.
             excluding_ids (Optional[List[models.ExtendedPointId]]): List of point IDs to exclude from results.
 
         Returns:
@@ -84,7 +82,7 @@ class Evaluator:
                 "with_payload": True,
                 "with_vectors": False,
                 "limit": limit,
-                "using": vector_name,
+                "using": self.relevance_feedback.vector_name,
             },
         )
 
@@ -96,7 +94,6 @@ class Evaluator:
     def evaluate_query(
         self,
         query: Any,
-        vector_name: str | None,
         formula_params: dict[str, float],
         dcg_win_rate: DcgWinRate,
         at_n: int = 10,  # metric@n
@@ -117,7 +114,6 @@ class Evaluator:
 
         Args:
             query (any): Original query (e.g., text, image, audio).
-            vector_name (Optional[str]): Named vector handle, or None for the default vector.
             formula_params (Dict[str, float]): Trained parameters of the relevance feedback formula.
             dcg_win_rate (DcgWinRate): DCG win rate tracker.
             at_n (int): Number of results to evaluate metrics on (@n).
@@ -141,7 +137,7 @@ class Evaluator:
             self.relevance_feedback.client,
             query_embedding,
             limit=eval_context_limit,
-            vector_name=vector_name,
+            vector_name=self.relevance_feedback.vector_name,
             collection_name=self.relevance_feedback.collection_name,
         )
 
@@ -172,7 +168,6 @@ class Evaluator:
             feedback,
             formula_params=formula_params,
             limit=at_n,
-            vector_name=vector_name,
         )
 
         # Getting golden scores to calculate the custom abovethreshold@N metric
@@ -192,7 +187,7 @@ class Evaluator:
             self.relevance_feedback.client,
             query_embedding,
             limit=at_n,
-            vector_name=vector_name,
+            vector_name=self.relevance_feedback.vector_name,
             collection_name=self.relevance_feedback.collection_name,
             excluding_ids=responses_point_ids,  # excluding initial vanilla retrieval results used for feedback
         )
@@ -220,7 +215,6 @@ class Evaluator:
         formula_params: dict[str, float],
         eval_queries: list[str] | None = None,
         amount_of_eval_queries: int | None = None,
-        vector_name: str | None = None,
         eval_context_limit: int = 3,
         exclude_synthetic_queries_ids: list[str] | None = None,
     ) -> dict[str, int]:
@@ -255,7 +249,6 @@ class Evaluator:
 
             eval_results = self.evaluate_query(
                 query,
-                vector_name=vector_name,
                 formula_params=formula_params,
                 dcg_win_rate=dcg_win_rate,
                 at_n=at_n,
