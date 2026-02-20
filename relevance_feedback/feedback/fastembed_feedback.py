@@ -34,7 +34,7 @@ class FastembedFeedback(Feedback):
 
         self._model_name = model_name
         self._model = self._create_model(model_name, **kwargs)
-        self.score_options = score_options or {}
+        self._score_options = score_options or {}
 
         if isinstance(self._model, LateInteractionTextEmbedding):
             self._model_type = _ModelType.LateInteractionTextEmbedding
@@ -95,15 +95,15 @@ class FastembedFeedback(Feedback):
 
     def score(self, query: Any, responses: list[Any]) -> list[float]:
         if self._model_type == _ModelType.LateInteractionTextEmbedding:
-            return self._score_colbert(query, responses, **self.score_options)
+            return self._score_colbert(query, responses, **self._score_options)
         elif self._model_type == _ModelType.TextCrossEncoder:
-            return self._score_cross_encoder(query, responses, **self.score_options)
+            return self._score_cross_encoder(query, responses, **self._score_options)
         elif self._model_type == _ModelType.TextEmbedding:
-            return self._score_text_embedding(query, responses, **self.score_options)
+            return self._score_text_embedding(query, responses, **self._score_options)
         elif self._model_type == _ModelType.ImageEmbedding:
-            return self._score_image_embedding(query, responses, **self.score_options)
+            return self._score_image_embedding(query, responses, **self._score_options)
         elif self._model_type == _ModelType.LateInteractionMultimodalEmbedding:
-            return self._score_image_late(query, responses, **self.score_options)
+            return self._score_image_late(query, responses, **self._score_options)
         raise ValueError(f"Unsupported model: {self._model_type}")
 
     def _score_text_embedding(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:

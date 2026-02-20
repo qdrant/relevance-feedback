@@ -72,13 +72,13 @@ class OpenAIRetriever(Retriever):
         assert OpenAI is not None, 'OpenAIRetriever requires `openai` package to be installed`'
         self._client = OpenAI(api_key=api_key, **kwargs)
         self._model_name = model_name
-        self.embed_options = embed_options or {}
+        self._embed_options = embed_options or {}
 
     def embed_query(self, query: str) -> list[float]:
         return self._client.embeddings.create(
             model=self._model_name,
             input=query,
-            **self.embed_options
+            **self._embed_options
         ).data[0].embedding
 
 ```
@@ -102,7 +102,7 @@ class CohereFeedback(Feedback):
     def __init__(self, model_name: str, api_key: str, score_options: dict[str, Any] | None = None, **kwargs: Any):
         self._api_key = api_key
         self._model_name = model_name  # E.g. "rerank-v4.0-pro"
-        self.score_options = score_options or {}
+        self._score_options = score_options or {}
         
         assert cohere is not None, "CohereFeedback requires `cohere` package"
         self._client = cohere.ClientV2(api_key=api_key, **kwargs)
@@ -113,7 +113,7 @@ class CohereFeedback(Feedback):
             query=query,
             documents=responses,
             top_n=len(responses),
-            **self.score_options
+            **self._score_options
         ).results
 
         feedback_model_scores = [
@@ -209,7 +209,7 @@ if __name__ == "__main__":
         api_key="your-api-key", 
         cloud_inference=True
     )
-    retriever = QdrantRetriever("Qdrant/clip-ViT-B-32-vision", embed_options={"lazy_load": True}, modality="image")  # lazy_load is just an example of propagating options, instead of loading a model into memory straightaway, it loads it on the first use
+    retriever = QdrantRetriever("Qdrant/clip-ViT-B-32-vision", modality="image", embed_options={"lazy_load": True})  # lazy_load is just an example of propagating options, instead of loading a model into memory straightaway, it loads it on the first use
     feedback = FastembedFeedback("Qdrant/colpali-v1.3-fp16", score_options={"lazy_load": True})
     relevance_feedback = RelevanceFeedback(
         retriever=retriever, 
@@ -242,7 +242,6 @@ evaluator = Evaluator(relevance_feedback=relevance_feedback)
 # or use synthetic queries sampled from your collection. The number of synthetic queries is configured via `amount_of_eval_queries`.
 results = evaluator.evaluate_queries(
     at_n=n,
-    vector_name=RETRIEVER_VECTOR_NAME,
     formula_params=formula_params,
     amount_of_eval_queries=AMOUNT_OF_EVAL_QUERIES,   
     eval_context_limit=EVAL_CONTEXT_LIMIT

@@ -8,8 +8,8 @@ class QdrantRetriever(Retriever):
     def __init__(
         self,
         model_name: str,
-        embed_options: models.DocumentOptions | dict[str, Any] | None = None,
         modality: Literal["text", "image"] = "text",
+        embed_options: models.DocumentOptions | dict[str, Any] | None = None,
     ):
         self._model_name = model_name
         self._embed_options = embed_options
