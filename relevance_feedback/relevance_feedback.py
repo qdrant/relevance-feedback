@@ -26,6 +26,7 @@ class RelevanceFeedback:
         feedback: Feedback,
         client: QdrantClient,
         collection_name: str,
+        vector_name: str | None = None,
         payload_key: str | None = None,
     ):
         self.retriever = retriever
@@ -33,6 +34,7 @@ class RelevanceFeedback:
         self.payload_key = payload_key
         self.client = client
         self.collection_name = collection_name
+        self.vector_name = vector_name
         self.synthetic_queries_ids: list[str] | None = None
 
         if isinstance(self.client._client, QdrantLocal):
@@ -41,7 +43,14 @@ class RelevanceFeedback:
                 "and does not support local mode (':memory:', or path=...)"
             )
 
-    def _retrieve_payload(self, responses: list[models.ScoredPoint]):
+    def retrieve_payload(self, responses: list[models.ScoredPoint]):
+        if self.payload_key is None:
+            raise ValueError(
+                "If your raw data is NOT stored in the payload (e.g., stored externally),"
+                "override `retrieve_payload`, by mapping response IDs"
+                "to your external data storage (preserving order)."
+            )
+
         responses_content = [p.payload[self.payload_key] for p in responses]
         return responses_content
 
@@ -49,8 +58,6 @@ class RelevanceFeedback:
         self,
         query_idx: int,
         query: Any,
-        vector_name: str | None,
-        payload_key: str | None,
         limit: int = 25,
         context_limit: int = 5,
         confidence_margin: float = 0.0,
@@ -71,8 +78,6 @@ class RelevanceFeedback:
         Args:
             query_idx (int): Ordinal index of the query in the training set.
             query (any): The query itself (text, image, audio, etc.).
-            vector_name (Optional[str]): Named vector handle or None if it's a default vector.
-            payload_key (Optional[str]): Payload key in Qdrant collection referring to the original data you're retrieving.
             limit (int): Number of responses to retrieve per query.
             context_limit (int): Number of top responses considered for context pairs mining.
             confidence_margin (float): Minimum difference between scores in a pair required to treat the pair as a valid context signal.
@@ -90,20 +95,13 @@ class RelevanceFeedback:
             self.client,
             query_embedding,
             limit=limit,
-            vector_name=vector_name,
+            vector_name=self.vector_name,
             collection_name=self.collection_name,
         )
 
         responses_point_ids = [p.id for p in responses]
 
-        if payload_key is None:
-            raise ValueError(
-                "If your raw data is NOT stored in the payload (e.g., stored externally),"
-                "override `retrieve_payload`, by mapping response IDs"
-                "to your external data storage (preserving order)."
-            )
-
-        responses_content = self._retrieve_payload(responses)
+        responses_content = self.retrieve_payload(responses)
         feedback_model_scores = self.feedback.score(query, responses_content)
 
         context_pairs = get_context_pairs(
@@ -128,8 +126,8 @@ class RelevanceFeedback:
         for response_idx, (response, feedback_model_score) in enumerate(
             zip(responses, feedback_model_scores)
         ):
-            if vector_name:
-                response_embedding = response.vector[vector_name]
+            if self.vector_name:
+                response_embedding = response.vector[self.vector_name]
             else:
                 response_embedding = response.vector
 
@@ -137,14 +135,14 @@ class RelevanceFeedback:
                 self.client,
                 response_embedding,
                 positive_context_point_id,
-                vector_name=vector_name,
+                vector_name=self.vector_name,
                 collection_name=self.collection_name,
             )
             to_negative_score = get_similarity_score(
                 self.client,
                 response_embedding,
                 negative_context_point_id,
-                vector_name=vector_name,
+                vector_name=self.vector_name,
                 collection_name=self.collection_name,
             )
 
@@ -168,8 +166,6 @@ class RelevanceFeedback:
     def prepare_train_data_all_queries(
         self,
         queries: list[Any],
-        vector_name: str | None,
-        payload_key: str | None,
         limit: int = 25,
         context_limit: int = 5,
         confidence_margin: float = 0.0,
@@ -189,8 +185,6 @@ class RelevanceFeedback:
 
         Args:
             queries (List[any]): Traing set of queries.
-            payload_key (Optional[str]): Payload key in Qdrant collection referring to the original data you're retrieving.
-            vector_name (Optional[str]): Named vector handle or None if it's a default vector.
             limit (int): Number of responses to retrieve per query.
             context_limit (int): Number of top responses considered for context pairs mining.
             confidence_margin (float): Minimum difference between scores in a pair required to treat the pair as a valid context signal.
@@ -210,8 +204,6 @@ class RelevanceFeedback:
             query_results = self.prepare_train_data_query(
                 query_idx,
                 query,
-                vector_name=vector_name,
-                payload_key=payload_key,
                 limit=limit,
                 context_limit=context_limit,
                 confidence_margin=confidence_margin,
@@ -248,7 +240,6 @@ class RelevanceFeedback:
         queries: list | None = None,
         amount_of_queries: int | None = None,
         confidence_margin: float | None = 0.0,
-        vector_name: str | None = None,
         lr: float = 0.005,
         epochs: int = 1000,
         patience: int = 200,
@@ -263,7 +254,6 @@ class RelevanceFeedback:
             amount_of_queries (int): Amount of synthetic queries to use for training, mutually exclusive with `queries`
             confidence_margin (float): Minimum difference between scores in a pair required to treat the pair as a valid
                 context signal.
-            vector_name (Optional[str]): Named vector handle or None if it's a default vector.
             lr (float): learning rate
             epochs (int): Number of epochs
             patience (int): Number of epochs without improvement
@@ -282,14 +272,12 @@ class RelevanceFeedback:
                 limit=amount_of_queries,
             )
             self.synthetic_queries_ids = [point.id for point in synthetic_queries]
-            queries = self._retrieve_payload(synthetic_queries)
+            queries = self.retrieve_payload(synthetic_queries)
         else:
             self.synthetic_queries_ids = None
 
         training_data = self.prepare_train_data_all_queries(
             queries,
-            vector_name=vector_name,
-            payload_key=self.payload_key,
             limit=limit,
             context_limit=context_limit,
             confidence_margin=confidence_margin,

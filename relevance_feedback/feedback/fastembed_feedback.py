@@ -1,5 +1,5 @@
 from typing import Any
-from enum import StrEnum
+from enum import Enum
 
 import numpy as np
 
@@ -7,17 +7,23 @@ from relevance_feedback.feedback import Feedback
 
 try:
     import fastembed
-    from fastembed import LateInteractionTextEmbedding
+    from fastembed import LateInteractionTextEmbedding, LateInteractionMultimodalEmbedding, ImageEmbedding, TextEmbedding
     from fastembed.rerank.cross_encoder import TextCrossEncoder
 except ImportError:
     fastembed = None
     LateInteractionTextEmbedding = None
+    LateInteractionMultimodalEmbedding = None
     TextCrossEncoder = None
+    ImageEmbedding = None
+    TextEmbedding = None
 
 
-class _ModelType(StrEnum):
+class _ModelType(str, Enum):
     LateInteractionTextEmbedding = "LateInteractionTextEmbedding"
+    LateInteractionMultimodalEmbedding = "LateInteractionMultimodalEmbedding"
     TextCrossEncoder = "TextCrossEncoder"
+    TextEmbedding = "TextEmbedding"
+    ImageEmbedding = "ImageEmbedding"
 
 
 class FastembedFeedback(Feedback):
@@ -32,13 +38,23 @@ class FastembedFeedback(Feedback):
 
         if isinstance(self._model, LateInteractionTextEmbedding):
             self._model_type = _ModelType.LateInteractionTextEmbedding
-        else:
+        elif isinstance(self._model, TextCrossEncoder):
             self._model_type = _ModelType.TextCrossEncoder
+        elif isinstance(self._model, TextEmbedding):
+            self._model_type = _ModelType.TextEmbedding
+        elif isinstance(self._model, ImageEmbedding):
+            self._model_type = _ModelType.ImageEmbedding
+        elif isinstance(self._model, LateInteractionMultimodalEmbedding):
+            self._model_type = _ModelType.LateInteractionMultimodalEmbedding
+        else:
+            raise ValueError(
+                f"Unsupported model: {model_name}, only LateInteractionTextEmbedding, TextCrossEncoder, TextEmbedding, LateInteractionMultimodalEmbedding and ImageEmbedding are supported"
+            )
 
     @staticmethod
     def _create_model(
         model_name: str, **kwargs: Any
-    ) -> "LateInteractionTextEmbedding | TextCrossEncoder":
+    ) -> "LateInteractionTextEmbedding | TextCrossEncoder | ImageEmbedding | TextEmbedding | LateInteractionMultimodalEmbedding":
         assert (
             fastembed is not None
         ), "FastembedFeedback requires `fastembed` package to be installed"
@@ -55,8 +71,26 @@ class FastembedFeedback(Feedback):
         ]:
             return TextCrossEncoder(model_name, **kwargs)
 
+        if model_name.lower() in [
+            description["model"].lower()
+            for description in TextEmbedding.list_supported_models()
+        ]:
+            return TextEmbedding(model_name, **kwargs)
+
+        if model_name.lower() in [
+            description["model"].lower()
+            for description in ImageEmbedding.list_supported_models()
+        ]:
+            return ImageEmbedding(model_name, **kwargs)
+
+        if model_name.lower() in [
+            description["model"].lower()
+            for description in LateInteractionMultimodalEmbedding.list_supported_models()
+        ]:
+            return LateInteractionMultimodalEmbedding(model_name, **kwargs)
+
         raise ValueError(
-            f"Unsupported model: {model_name}, only LateInteractionTextEmbedding and TextCrossEncoder are supported"
+            f"Unsupported model: {model_name}, only LateInteractionTextEmbedding, TextCrossEncoder, TextEmbedding, LateInteractionMultimodalEmbedding and ImageEmbedding are supported"
         )
 
     def score(self, query: Any, responses: list[Any]) -> list[float]:
@@ -64,9 +98,55 @@ class FastembedFeedback(Feedback):
             return self._score_colbert(query, responses, **self.score_options)
         elif self._model_type == _ModelType.TextCrossEncoder:
             return self._score_cross_encoder(query, responses, **self.score_options)
+        elif self._model_type == _ModelType.TextEmbedding:
+            return self._score_text_embedding(query, responses, **self.score_options)
+        elif self._model_type == _ModelType.ImageEmbedding:
+            return self._score_image_embedding(query, responses, **self.score_options)
+        elif self._model_type == _ModelType.LateInteractionMultimodalEmbedding:
+            return self._score_image_late(query, responses, **self.score_options)
         raise ValueError(f"Unsupported model: {self._model_type}")
 
+    def _score_text_embedding(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        assert isinstance(self._model, TextEmbedding)
+        query_embedded_with_feedback_model = list(self._model.query_embed(query, **kwargs))[0]
+        responses_embeded_with_feedback_model = list(self._model.embed(responses, **kwargs))
+
+        feedback_model_scores = []
+        for response_embedding in responses_embeded_with_feedback_model:
+            feedback_model_scores.append(
+                self._max_sim_cosine_1d(query_embedded_with_feedback_model, response_embedding)
+            )
+
+        return feedback_model_scores
+
+    def _score_image_embedding(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        assert isinstance(self._model, ImageEmbedding)
+        query_embedded_with_feedback_model = list(self._model.embed(query, **kwargs))[0]
+        responses_embeded_with_feedback_model = list(self._model.embed(responses, **kwargs))
+
+        feedback_model_scores = []
+        for response_embedding in responses_embeded_with_feedback_model:
+            feedback_model_scores.append(
+                self._max_sim_cosine_1d(query_embedded_with_feedback_model, response_embedding)
+            )
+
+        return feedback_model_scores
+
+    def _score_image_late(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        assert isinstance(self._model, LateInteractionMultimodalEmbedding)
+        query_embedded_with_feedback_model = list(self._model.embed_image(query, **kwargs))[0]
+        responses_embeded_with_feedback_model = list(self._model.embed_image(responses, **kwargs))
+
+        feedback_model_scores = []
+        for response_embedding in responses_embeded_with_feedback_model:
+            feedback_model_scores.append(
+                self._max_sim_cosine(query_embedded_with_feedback_model, response_embedding)
+            )
+
+        return feedback_model_scores
+
     def _score_colbert(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        assert isinstance(self._model, LateInteractionTextEmbedding)
         query_embedded_with_feedback_model = list(self._model.query_embed(query, **kwargs))[0]
         responses_embeded_with_feedback_model = list(self._model.embed(responses, **kwargs))
 
@@ -79,7 +159,30 @@ class FastembedFeedback(Feedback):
         return feedback_model_scores
 
     def _score_cross_encoder(self, query: Any, responses: list[Any], **kwargs: Any) -> list[float]:
+        assert isinstance(self._model, TextCrossEncoder)
         return list(self._model.rerank(query, responses, **kwargs))
+
+    @staticmethod
+    def _max_sim_cosine_1d(vector_a: np.ndarray, vector_b: np.ndarray) -> float:
+        """
+        vector_a: d dimensions
+        vector_b: d dimensions
+        cosine similarity as metric between individual vectors assumed
+        """
+        # L2 normalize (for cosine sim)
+        norm_a = np.linalg.norm(vector_a)
+        vector_a = np.divide(
+            vector_a, norm_a, out=np.zeros_like(vector_a), where=norm_a > 0
+        )
+
+        norm_b = np.linalg.norm(vector_b)
+        vector_b = np.divide(
+            vector_b, norm_b, out=np.zeros_like(vector_b), where=norm_b > 0
+        )
+
+        sim = vector_a @ vector_b.T
+
+        return sim.item()
 
     @staticmethod
     def _max_sim_cosine(multivector_a: np.ndarray, multivector_b: np.ndarray) -> float:
