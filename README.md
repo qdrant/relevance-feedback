@@ -13,48 +13,57 @@ from qdrant_relevance_feedback import RelevanceFeedback
 from qdrant_relevance_feedback.feedback import FastembedFeedback
 from qdrant_relevance_feedback.retriever import QdrantRetriever
 
-
 if __name__ == "__main__":
     RETRIEVER_VECTOR_NAME = None # your named vector handle in Qdrant's collection or None if it's a default vector
     COLLECTION_NAME = "document_collection"
 
-    # these two parameters affect the cost and time of data collection for training
+    # LIMIT controls the cost-quality tradeoff: the feedback model scores LIMIT documents per query to generate ground truth labels.
     LIMIT = 50 # responses per query
-    CONTEXT_LIMIT = 5 # top responses used for mining context pairs
     
     client = QdrantClient(
         url="https://xyz-example.eu-central.aws.cloud.qdrant.io",
         api_key="your-api-key", 
         cloud_inference=True
     )
-    retriever = QdrantRetriever("sentence-transformers/all-minilm-l6-v2", embed_options={"lazy_load": True})  # lazy_load is just an example of propagating options, instead of loading a model into memory straightaway, it loads it on the first use
-    feedback = FastembedFeedback("Xenova/ms-marco-MiniLM-L-6-v2", score_options={"lazy_load": True})
+    retriever = QdrantRetriever("mixedbread-ai/mxbai-embed-large-v1", modality="text", embed_options={"lazy_load": True})  #lazy_load is an example of propagating options, instead of loading a model into memory straightaway, it loads it on the 1st use
+    feedback = FastembedFeedback("colbert-ir/colbertv2.0", score_options={"lazy_load": True})
     relevance_feedback = RelevanceFeedback(
         retriever=retriever, 
         feedback=feedback, 
         client=client, 
         collection_name=COLLECTION_NAME, 
         vector_name=RETRIEVER_VECTOR_NAME,
-        payload_key="document"
+        payload_key="document" # should refer to the raw data, which, after being embedded, is used in Qdrant retrieval. So, set this to the payload field that contains your original data you're searching for.
     )
 
     formula_params = relevance_feedback.train(
-        queries=None,  # if you have specific queries for training, provide a list here
-        amount_of_queries=200,  # otherwise, you can specify amount of synthetic queries - documents sampled from your collection
+        queries=None,  # if you have real queries for training, provide a list here
+        amount_of_queries=200,  # otherwise, you can specify amount of "synthetic queries" - documents randomly sampled from your collection
         limit=LIMIT,
-        context_limit=CONTEXT_LIMIT,
+        context_limit=5, # top responses used for mining context pairs
     )
     print('formula params are: ', formula_params)
 ```
 
-When using `QdrantRetriever`, both local (via Fastembed) and cloud inference are supported.
-Set `cloud_inference=True` to use cloud inference, `cloud_inference=False` or just empty otherwise.
+> When using `QdrantRetriever`, both local (via Fastembed) and cloud inference are supported. Set `cloud_inference=True` to use cloud inference, `cloud_inference=False` or just empty otherwise.
+
+> **Warning:** If your use case doesn’t involve document-to-document semantic similarity search, training on sampled documents ("synthetic queries") alone may completely cancel the effect of relevance feedback scoring on real data.
+It’s far more effective to use real queries.
+
+### Redefining source of metadata (payload).
+
+In `RelevanceFeedback` class above, you're expected to fill in a `payload_key`.  
+This key should refer to the raw data, which, after being embedded, is used in Qdrant retrieval (with `RETRIEVER_VECTOR_NAME`). This data, in its original form (before it is embedded for dense retrieval), is used for the feedback model ground truth scoring.
+
+If you're storing original data externally to Qdrant's collection, you should override `retrieve_payload` method of `RelevanceFeedback` class.
 
 ## Adding your own models
 
 ### Retriever
 
 In order to use a custom retriever, you can define your class inherited from `Retriever` and override `embed_query` method.
+
+Here's an example with overriding `Retriever`. 
 
 ```python
 from typing import Any
@@ -81,6 +90,12 @@ class OpenAIRetriever(Retriever):
             **self._embed_options
         ).data[0].embedding
 
+```
+
+> **Note:** However, if you plan to use OpenAI embeddings for retrieval, we recommend using Qdrant Cloud Inference in `QdrantRetriever` to optimize latency.
+
+```python
+QdrantRetriever(model_name="openai/text-embedding-3-small"), embed_options={"openai-api-key" : "sk-proj-..."})
 ```
 
 ### Feedback model
@@ -138,7 +153,7 @@ if __name__ == "__main__":
     COLLECTION_NAME = "document_collection"
     LIMIT = 50
     CONTEXT_LIMIT = 5
-    client = QdrantClient()
+    client = QdrantClient(...)
     retriever = OpenAIRetriever("text-embedding-3-small", api_key="<your openai api key>")
     feedback = CohereFeedback("rerank-v4.0-pro", api_key="<your cohere api key")
     
@@ -159,10 +174,9 @@ if __name__ == "__main__":
     print('formula params are: ', formula_params)
 ```
 
+## Image data with QdrantRetriever and FastembedFeedback
 
-## Images
-
-If you have a collection of images, represented by `image_url` and `file_name` payload fields, payload retrieval is more complicated, as `qdrant_client` and `fastembed` expect images to be paths to files on disk. In cases like this you can override `retrieve_payload` entirely. Here is an example that downloads images to disk and returns their file path. Note, that you'll also have to tell `QdrantRetriever` that you are dealing with images, not text.
+If you have a collection of images, represented by `image_url` and `file_name` payload fields, payload usage is more complicated, as `qdrant_client` and `fastembed` expect images to be paths to files on disk. Here is an example that downloads images to disk and returns their file path.
 
 ```python
 import os
@@ -199,8 +213,6 @@ class RelevanceFeedbackImageCache(RelevanceFeedback):
 if __name__ == "__main__":
     RETRIEVER_VECTOR_NAME = None
     COLLECTION_NAME = "image_collection"
-
-    # these two parameters affect the cost and time of data collection for training
     LIMIT = 50 # responses per query
     CONTEXT_LIMIT = 5 # top responses used for mining context pairs
     
@@ -209,8 +221,8 @@ if __name__ == "__main__":
         api_key="your-api-key", 
         cloud_inference=True
     )
-    retriever = QdrantRetriever("Qdrant/clip-ViT-B-32-vision", modality="image", embed_options={"lazy_load": True})  # lazy_load is just an example of propagating options, instead of loading a model into memory straightaway, it loads it on the first use
-    feedback = FastembedFeedback("Qdrant/colpali-v1.3-fp16", score_options={"lazy_load": True})
+    retriever = QdrantRetriever("Qdrant/clip-ViT-B-32-vision", modality="image")  # Note, that you'll also have to tell `QdrantRetriever` that you are dealing with images, not text.
+    feedback = FastembedFeedback("Qdrant/colpali-v1.3-fp16")
     relevance_feedback = RelevanceFeedbackImageCache(
         retriever=retriever, 
         feedback=feedback, 
@@ -230,20 +242,24 @@ if __name__ == "__main__":
 
 ## Evaluation
 
+Evaluates the trained naive formula on two metrics: relative gain based on abovethreshold@N and Discounted Cumulative Gain (DCG) Win Rate@N.
+
+> Detailed explanation of these metrics and their meaning can be found in the ["Relevance Feedback in Qdrant"](https://qdrant.tech/articles/relevance-feedback/) article.
+
 ```python
 from qdrant_relevance_feedback.evaluate import Evaluator
 
 n = 10  # as in metric@n
-EVAL_CONTEXT_LIMIT = 3  # top responses used for mining context pairs
-AMOUNT_OF_EVAL_QUERIES = 100
+EVAL_CONTEXT_LIMIT = 3  # top responses used for mining context pairs (what you'll use in production for you retrieval pipelines)
 
 evaluator = Evaluator(relevance_feedback=relevance_feedback)
 # Similar to `relevance_feedback.train`, you can provide your own set of predefined queries by passing `eval_queries=[<queries>]`, 
-# or use synthetic queries sampled from your collection. The number of synthetic queries is configured via `amount_of_eval_queries`.
+# or use synthetic queries sampled from your collection.
 results = evaluator.evaluate_queries(
     at_n=n,
     formula_params=formula_params,
-    amount_of_eval_queries=AMOUNT_OF_EVAL_QUERIES,   
+    eval_queries=None,
+    amount_of_eval_queries=100,   
     eval_context_limit=EVAL_CONTEXT_LIMIT
 )
 ```
