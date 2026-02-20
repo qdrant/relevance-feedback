@@ -141,13 +141,6 @@ class Evaluator:
             collection_name=self.relevance_feedback.collection_name,
         )
 
-        # ----------------------Note: ---------------------------------------------
-        # If your raw data is NOT stored in the payload (e.g., stored externally),
-        # instead of setting PAYLOAD_KEY, redefine `responses_content`,
-        # `relevance_feedback_responses_content` & `vanilla_retrieval_responses_content` below
-        # by mapping `response_point_ids` to your external data storage (preserving order).
-        # -------------------------------------------------------------------------
-
         responses_content = self.relevance_feedback.retrieve_payload(responses)
 
         # Getting feedback

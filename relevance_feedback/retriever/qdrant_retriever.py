@@ -12,15 +12,16 @@ class QdrantRetriever(Retriever):
         modality: Literal["text", "image"] = "text",
     ):
         self._model_name = model_name
-        self.embed_options = embed_options
-        self.modality = modality
+        self._embed_options = embed_options
+        self._modality = modality
 
     def embed_query(self, query: str) -> models.Document | models.Image:
-        if self.modality == "text":
+        if self._modality == "text":
             return models.Document(
-                text=query, model=self._model_name, options=self.embed_options
+                text=query, model=self._model_name, options=self._embed_options
             )
         else:
+            # Image query is a path to an image file in case of local inference or a URL in case of cloud inference
             return models.Image(
-                image=query, model=self._model_name, options=self.embed_options
+                image=query, model=self._model_name, options=self._embed_options
             )
