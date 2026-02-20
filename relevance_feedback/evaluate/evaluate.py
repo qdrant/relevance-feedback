@@ -1,6 +1,5 @@
 from typing import Any
 
-import requests
 import rich
 from qdrant_client import models
 from rich.progress import track
