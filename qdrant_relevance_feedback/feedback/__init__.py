@@ -1,2 +1,2 @@
-from relevance_feedback.feedback.feedback import Feedback
-from relevance_feedback.feedback.fastembed_feedback import FastembedFeedback
+from qdrant_relevance_feedback.feedback.feedback import Feedback
+from qdrant_relevance_feedback.feedback.fastembed_feedback import FastembedFeedback

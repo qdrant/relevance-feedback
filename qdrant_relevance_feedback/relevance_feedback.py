@@ -3,13 +3,12 @@ from typing import Any
 import pandas as pd
 import rich
 from qdrant_client import QdrantClient, models
-from qdrant_client.local.qdrant_local import QdrantLocal
 from rich.progress import track
 
-from relevance_feedback.feedback import Feedback
-from relevance_feedback.retriever import Retriever
-from relevance_feedback.train.naive_formula import NaiveFormula
-from relevance_feedback.train.train import (
+from qdrant_relevance_feedback.feedback import Feedback
+from qdrant_relevance_feedback.retriever import Retriever
+from qdrant_relevance_feedback.train.naive_formula import NaiveFormula
+from qdrant_relevance_feedback.train.train import (
     get_context_pairs,
     get_similarity_score,
     get_synthetic_queries,

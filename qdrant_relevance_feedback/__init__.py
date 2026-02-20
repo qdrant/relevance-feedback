@@ -1,1 +1,1 @@
-from relevance_feedback.relevance_feedback import RelevanceFeedback
+from qdrant_relevance_feedback.relevance_feedback import RelevanceFeedback

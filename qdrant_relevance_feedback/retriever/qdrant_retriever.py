@@ -1,7 +1,7 @@
 from typing import Literal, Any
 from qdrant_client import models
 
-from relevance_feedback.retriever.retriever import Retriever
+from qdrant_relevance_feedback.retriever.retriever import Retriever
 
 
 class QdrantRetriever(Retriever):
