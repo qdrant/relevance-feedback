@@ -174,6 +174,7 @@ evaluator = Evaluator.from_relevance_feedback(relevance_feedback=relevance_feedb
 # or use synthetic queries sampled from your collection. The number of synthetic queries is configured via `amount_of_eval_queries`.
 results = evaluator.evaluate_queries(
     at_n=n,
+    vector_name=RETRIEVER_VECTOR_NAME,
     formula_params=formula_params,
     amount_of_eval_queries=AMOUNT_OF_EVAL_QUERIES,   
     eval_context_limit=EVAL_CONTEXT_LIMIT
