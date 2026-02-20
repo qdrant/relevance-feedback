@@ -9,9 +9,9 @@ As a result, you will get `a`, `b` and `c` formula parameters, which you can [pl
 ```python
 from qdrant_client import QdrantClient
 
-from relevance_feedback import RelevanceFeedback
-from relevance_feedback.feedback import FastembedFeedback
-from relevance_feedback.retriever import QdrantRetriever
+from qdrant_relevance_feedback import RelevanceFeedback
+from qdrant_relevance_feedback.feedback import FastembedFeedback
+from qdrant_relevance_feedback.retriever import QdrantRetriever
 
 
 if __name__ == "__main__":
@@ -59,7 +59,7 @@ In order to use a custom retriever, you can define your class inherited from `Re
 ```python
 from typing import Any
 
-from relevance_feedback.retriever import Retriever
+from qdrant_relevance_feedback.retriever import Retriever
 
 try:
     from openai import OpenAI
@@ -90,7 +90,7 @@ Same for the feedback model, but this time you'd need to inherit from `Feedback`
 ```python
 from typing import Any
 
-from relevance_feedback.feedback import Feedback
+from qdrant_relevance_feedback.feedback import Feedback
 
 try:
     import cohere
@@ -130,7 +130,7 @@ Once you have created your classes, use them the same way as the builtin ones: c
 ```python
 from qdrant_client import QdrantClient
 
-from relevance_feedback import RelevanceFeedback
+from qdrant_relevance_feedback import RelevanceFeedback
 
 
 if __name__ == "__main__":
@@ -172,9 +172,9 @@ from pathlib import Path
 import requests
 from qdrant_client import QdrantClient, models
 
-from relevance_feedback import RelevanceFeedback
-from relevance_feedback.feedback import FastembedFeedback
-from relevance_feedback.retriever import QdrantRetriever
+from qdrant_relevance_feedback import RelevanceFeedback
+from qdrant_relevance_feedback.feedback import FastembedFeedback
+from qdrant_relevance_feedback.retriever import QdrantRetriever
 
 
 class RelevanceFeedbackImageCache(RelevanceFeedback):
@@ -231,7 +231,7 @@ if __name__ == "__main__":
 ## Evaluation
 
 ```python
-from relevance_feedback.evaluate import Evaluator
+from qdrant_relevance_feedback.evaluate import Evaluator
 
 n = 10  # as in metric@n
 EVAL_CONTEXT_LIMIT = 3  # top responses used for mining context pairs

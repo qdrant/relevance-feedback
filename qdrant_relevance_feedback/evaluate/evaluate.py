@@ -4,13 +4,13 @@ import rich
 from qdrant_client import models
 from rich.progress import track
 
-from relevance_feedback import RelevanceFeedback
-from relevance_feedback.evaluate.metrics import (
+from qdrant_relevance_feedback import RelevanceFeedback
+from qdrant_relevance_feedback.evaluate.metrics import (
     DcgWinRate,
     above_threshold_at_n,
     relative_relevance_gain,
 )
-from relevance_feedback.train.train import get_synthetic_queries, vanilla_retrieval
+from qdrant_relevance_feedback.train.train import get_synthetic_queries, vanilla_retrieval
 
 
 class Evaluator:

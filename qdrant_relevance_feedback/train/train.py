@@ -2,7 +2,7 @@ import pandas as pd
 import torch
 import torch.optim as optim
 
-from relevance_feedback.train.naive_formula import NaiveFormula, ranking_loss
+from qdrant_relevance_feedback.train.naive_formula import NaiveFormula, ranking_loss
 
 from qdrant_client import models, QdrantClient
 

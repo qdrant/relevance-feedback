@@ -1,1 +1,0 @@
-from relevance_feedback.relevance_feedback import RelevanceFeedback

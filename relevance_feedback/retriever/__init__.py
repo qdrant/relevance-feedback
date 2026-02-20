@@ -1,2 +1,0 @@
-from relevance_feedback.retriever.retriever import Retriever
-from relevance_feedback.retriever.qdrant_retriever import QdrantRetriever

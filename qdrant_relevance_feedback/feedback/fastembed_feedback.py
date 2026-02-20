@@ -3,7 +3,7 @@ from enum import Enum
 
 import numpy as np
 
-from relevance_feedback.feedback import Feedback
+from qdrant_relevance_feedback.feedback import Feedback
 
 try:
     import fastembed

@@ -1,5 +1,5 @@
 [project]
-name = "relevance_feedback"
+name = "qdrant-relevance-feedback"
 version = "0.1.0"
 authors = [
   { name = "Qdrant Team", email = "info@qdrant.tech" },
