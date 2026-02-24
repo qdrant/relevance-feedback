@@ -1,3 +1,4 @@
+import rich
 import pandas as pd
 import torch
 import torch.optim as optim
@@ -233,17 +234,17 @@ def train_formula(
             since_improve += 1
 
         if epoch % 100 == 0:
-            print(f"Epoch {epoch+1}/{epochs} | train: {loss.item():.5f} | val: {val_loss.item():.5f}")
-            print(f"max|grad|={max_abs_grad:.2e}  ||grad||2={grad_l2:.2e}")
+            rich.print(f"Epoch {epoch+1}/{epochs} | train: {loss.item():.5f} | val: {val_loss.item():.5f}")
+            rich.print(f"max|grad|={max_abs_grad:.2e}  ||grad||2={grad_l2:.2e}")
 
         if since_improve >= patience:
-            print(f"Early stopping at epoch {epoch+1} (no val improvement for {patience} epochs).")
+            rich.print(f"Early stopping at epoch {epoch+1} (no val improvement for {patience} epochs).")
             break
 
     # Load best validation-state params
     if best_state is not None:
         formula.load_state_dict(best_state)
-        print(f'\nNaive formula params: a={formula.params[0]:.6f}, b={formula.params[1]:.6f}, c={formula.params[2]:.6f}')
+        rich.print(f'\nNaive formula params: a={formula.params[0]:.6f}, b={formula.params[1]:.6f}, c={formula.params[2]:.6f}')
 
     return formula
 
