@@ -77,7 +77,7 @@ class Evaluator:
         dcg_win_rate: DcgWinRate,
         at_n: int = 10,  # metric@n
         eval_context_limit: int = 3,
-    ) -> dict[str, int]:
+    ) -> dict[str, int] | None:
         """
         Evaluate retrieval for a single query by comparing relevance feedback–based retrieval
         against vanilla retrieval.
@@ -99,7 +99,9 @@ class Evaluator:
             eval_context_limit (int): Number of initial top responses used for relevance feedback.
 
         Returns:
-            Dict[str, int]: Counts of desired results above the threshold for each method (cc `above_threshold_at_n`):
+            Optional[Dict[str, int]]: Counts of desired results above the threshold for each method
+                (cc `above_threshold_at_n`), or None if the query is excluded from the eval set
+                (e.g., not enough feedback signals or all feedback scores are identical):
                 {
                   "relevance_feedback_retrieval": <int>,
                   "vanilla_retrieval": <int>
@@ -129,6 +131,20 @@ class Evaluator:
             (point_id, score)
             for point_id, score in zip(responses_point_ids, feedback_model_scores)
         ]
+
+        if len(feedback) < 2:
+            rich.print(
+                f"[yellow]Not enough feedback signals: the feedback model evaluated only {len(feedback)} result(s) for this query, "
+                f"while at least 2 are needed to calculate a relevance signal. This query is excluded from the eval set.[/yellow]"
+            )
+            return None
+
+        if all(abs(s - feedback_model_scores[0]) < 1e-9 for s in feedback_model_scores):
+            rich.print(
+                f"[yellow]No relevance signal in feedback: the feedback model evaluated all {eval_context_limit} results as identical, "
+                f"so most probably they are duplicates. This query is excluded from the eval set.[/yellow]"
+            )
+            return None
 
         # Best relevance score from the feedback model among the top retrieved results
         # The goal is to retrieve results that are more relevant than this one (as judged by the feedback model)
@@ -212,6 +228,7 @@ class Evaluator:
             )
             eval_queries = self.relevance_feedback.retrieve_payload(eval_synthetic_queries)
 
+        skipped_queries = 0
         for query_idx, query in track(
             enumerate(eval_queries),
             total=len(eval_queries),
@@ -227,22 +244,27 @@ class Evaluator:
                 eval_context_limit=eval_context_limit,
             )
 
+            if eval_results is None:
+                skipped_queries += 1
+                continue
+
             total_relevance_feedback += eval_results["relevance_feedback_retrieval"]
             total_vanilla_retrieval += eval_results["vanilla_retrieval"]
 
-        print(
-            "\nOn the 2nd retrieval iteration, over all the eval set:\n",
-            f"- Relevance feedback-based retrieval surfaced {total_relevance_feedback} more relevant results compared to the first iteration.\n",
-            f"- While vanilla retrieval surfaced {total_vanilla_retrieval} more relevant results compared to the first iteration.\n",
-        )
+        if skipped_queries > 0:
+            rich.print(
+                f"\n{skipped_queries}/{len(eval_queries)} queries were excluded from the test set."
+            )
 
-        print(
-            f"Relative relevance gain of using relevance feedback–based retrieval is {relative_relevance_gain(total_relevance_feedback, total_vanilla_retrieval)}%\n"
-        )
-
-        print(
-            "DCG win rate over eval set of queries:\n",
-            f"Vanilla retrieval: {dcg_win_rate.evaluate_left()}% wins\nRelevance Feedback-based retrieval: {dcg_win_rate.evaluate_right()}% wins\nTies: {dcg_win_rate.evaluate_ties()}%",
+        rich.print(
+            f"\n[bold]On the 2nd retrieval iteration, over this test set:[/bold]\n"
+            f"  Relevance feedback retrieval surfaced [bold]{total_relevance_feedback}[/bold] more relevant results (according to the feedback model)\n"
+            f"  Vanilla retrieval surfaced [bold]{total_vanilla_retrieval}[/bold] more relevant results (according to the feedback model)\n"
+            f"\n[bold]Relative results relevance gain over this test set is:[/bold] {relative_relevance_gain(total_relevance_feedback, total_vanilla_retrieval)}%\n"
+            f"\n[bold]DCG win rates (which approach ranks results better):[/bold]\n"
+            f"  Vanilla retrieval:            [bold]{dcg_win_rate.evaluate_left()}%[/bold] wins\n"
+            f"  Relevance feedback retrieval:  [bold]{dcg_win_rate.evaluate_right()}%[/bold] wins\n"
+            f"  Ties:                          [bold]{dcg_win_rate.evaluate_ties()}%[/bold]"
         )
         return {
             "relevance_feedback_retrieval": total_relevance_feedback,

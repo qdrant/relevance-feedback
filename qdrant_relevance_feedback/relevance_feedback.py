@@ -102,11 +102,9 @@ class RelevanceFeedback:
         )
 
         if len(context_pairs) == 0:
-            print(
-                f"No context pairs can be mined with the specified confidence margin for query with index {query_idx}."
-            )
-            print(
-                f"That might, for example, mean, that top #{context_limit} context_limit results are duplicates."
+            rich.print(
+                f"[yellow]No context pairs can be mined with the specified confidence margin for query with index {query_idx}. "
+                f"That might, for example, mean, that top #{context_limit} context_limit results are duplicates.[/yellow]"
             )
             return []
 
@@ -146,7 +144,7 @@ class RelevanceFeedback:
                     "query_idx": query_idx,
                     # "query": query, #This field is optional & needed only for empirical analysis
                     "response_idx": response_idx,
-                    # "response_content": response.payload[payload_key], #or respective entry from responses_content. This field is optional & needed only for empirical analysis
+                    # "response_content": response.payload[self.payload_key], #or respective entry from responses_content. This field is optional & needed only for empirical analysis
                     "confidence": confidence,
                     "score": response.score,
                     "delta": delta,
@@ -276,8 +274,8 @@ class RelevanceFeedback:
             confidence_margin=confidence_margin,
         )
         rich.print(
-            f"On {training_data[training_data.target_score > 0].groupby('query_idx').ngroups / len(queries) * 100:.2f}% "
-            "of training queries the feedback model strongly disagreed with the retriever model."
+            f"\nOn {training_data[training_data.target_score > 0].groupby('query_idx').ngroups / len(queries) * 100:.2f}% "
+            "of training queries the feedback model strongly disagreed with the retriever model.\n"
         )
 
         (
